@@ -1,0 +1,1550 @@
+
+-- Configure the scripting zone.
+ScriptingZone = '8fa5bc'
+
+NameLabels = { }
+SuitLabels = { }
+ScoreLabels = { }
+BidInputs = { }
+TrickLabels = { }
+
+RoundLabel = 0
+DealerLabel = 0
+StateLabel = 0
+NextButton = 0
+
+State_Setup = 0
+State_PickSuit = 1
+State_Bid = 2
+State_Play = 3
+State_Done = 4
+
+MaxRounds = { 20, 20, 20, 15, 12, 10 }
+
+DeckPosition = {x=34.26, y=1.09, z=0.0}
+DiscardDeckPosition = {x=34.26, y=1.09, z=12.0}
+BadPlayPosition = {x=34.26, y=1.09, z=-12.0}
+
+---
+--- Game info
+---
+State = State_Setup
+FirstDealerSeat = 0
+Round = 0
+Dealer = 1
+FirstPlayer = 0
+
+--[[
+    20x6 array
+
+    dealer      - Player is dealer this round
+    bid         - Player bid for this round
+    score       - Player score for this round
+    tricks      - Player actual tricks for this round
+    didBid      - Player has bid
+]]--
+Scores = { }
+
+--[[
+    Array of objects:
+    Color   - Player Color
+    Present - Player is currently in the game
+    Name    - The steam name of the player
+]]--
+SeatMap = { }
+
+-- Array of objects that were dealt to players for the current round.
+--[[
+    Card =  Card Object,
+    Owner = Id of player #,
+    Color = Player oclor,
+    Rank =
+    Suit =
+    Name =
+    ]]--
+DealtCards = { }
+
+-- Array of objects that will be dropped if picked up by the player
+DontTouchList = { }
+
+--[[
+    Array of objects:
+    Card    = The card object
+    Name    = Name of the card
+    Description = Description of the card (e.g. 2 of Spades)
+    Player  = Player who played the card
+    Rank    = Rank of the card
+    Suit    = Suit of the card
+--]]
+PlayedCards = { }
+
+-- An array of strings listing the suit that was played for each round
+Suits = { }
+
+Trump = "?"
+TrumpName = "?"
+ResetClickTime = 0
+ResetClickCount = 0
+
+CurrentPlayerTurn = 1
+Deck = nil
+DicardDeck = nil
+TrumpCard = nil
+
+zPos = 0.6
+zPosHidden = -2
+
+function createScoreBits(xpos, ypos)
+    self.createButton({
+        label="", click_function="onNothing", function_owner=self,
+        position={xpos, zPos, ypos}, width=0, height=0, font_size=270
+    })
+    self.createButton({
+        label="", click_function="onNothing", function_owner=self,
+        position={xpos + 1.20, zPos, ypos - 0.14}, width=0, height=0, font_size=170
+    })
+    self.createButton({
+        label="", click_function="onNothing", function_owner=self,
+        position={xpos + 1.20, zPos, ypos + 0.15}, width=0, height=0, font_size=170
+    })
+    self.createButton({
+        label="•", click_function="onNothing", function_owner=self,
+        position={xpos + 0.717, zPos, ypos + 0.008}, width=0, height=0, font_size=420
+    })
+end
+
+
+function onLoad(save_state)
+
+    local ButtonId = 0
+
+    -- First create the name plates.
+    local nameColumnsFirstX = -4.9
+    local nameColumnsOffsetX = 2.258
+
+    local scoreFirstX = -5.3
+    local scoreOffX = 2.258
+    local scoreFirstY = -5.6
+    local scoreOffY = 0.580
+    local xpos = 0
+    local ypos = 0
+
+    local suitOffX = -6.45
+
+    local max = { 20, 20, 20, 15, 12, 10 }
+
+    local inputsFirstX = -4.95
+    local inputsOffset = 2.265
+    local inputsWidth = 1090
+    local inputsHeight = 270
+
+    -- Name header
+    xpos = nameColumnsFirstX
+    for i = 1, 6 do
+        self.createButton({
+            label="", click_function="onNothing", function_owner=self,
+            position={xpos, zPos, -6.16}, width=0, height=0, font_size=160
+        })
+        NameLabels[i] = ButtonId
+        ButtonId = ButtonId + 1
+        xpos = xpos + nameColumnsOffsetX
+    end
+
+    -- Then create the score box.
+    ypos = scoreFirstY
+    for j = 1, 20 do
+        xpos = scoreFirstX
+        ScoreLabels[j] = { }
+        local scoreLine = ScoreLabels[j]
+        for i = 1, 6 do
+            local actualId = -99
+            if j <= max[i] then
+                createScoreBits(xpos, ypos)
+                actualId = ButtonId
+                ButtonId = ButtonId + 4
+            end
+            xpos = xpos + scoreOffX
+
+            scoreLine[i] = {
+                score = actualId,
+                bid = actualId + 1,
+                tricks = actualId + 2,
+                dealer = actualId + 3
+            }
+        end        
+        ypos = ypos + scoreOffY
+    end
+
+    -- Create the suit column
+    ypos = scoreFirstY
+    for j = 1, 20 do
+        self.createButton({
+            label="", click_function="onNothing", function_owner=self,
+            position={suitOffX, zPos, ypos}, width=0, height=0, font_size=270
+        })
+        ypos = ypos + scoreOffY
+        SuitLabels[j] = ButtonId
+        ButtonId = ButtonId + 1
+    end
+
+    -- Round information
+    self.createButton({
+        label="20", click_function="onNothing", function_owner=self,
+        position={scoreFirstX, zPos, 6.27}, width=0, height=0, font_size=290
+    })
+    RoundLabel = ButtonId
+    ButtonId = ButtonId + 1
+
+    self.createButton({
+        label="", click_function="onNothing", function_owner=self,
+        position={scoreFirstX + 4.8, zPos, 6.27}, width=0, height=0, font_size=250
+    })
+    DealerLabel = ButtonId
+    ButtonId = ButtonId + 1
+
+    self.createButton({
+        label="Game Setup", click_function="onNothing", function_owner=self,
+        position={scoreFirstX + 10.3, zPos, 6.27}, width=0, height=0, font_size=270
+    })
+    StateLabel = ButtonId
+    ButtonId = ButtonId + 1
+
+    -- Bids
+    local inputId = 0
+    xpos = inputsFirstX
+    for i = 1, 6 do
+        self.createInput({input_function="onBid" .. i .. "Changed", function_owner = self, alignment=3, validation=2,
+                          position = {xpos, zPos, 6.98}, width=inputsWidth, height=inputsHeight, font_size=240, label="" })
+        xpos = xpos + inputsOffset
+        BidInputs[i] = inputId
+        inputId = inputId + 1
+    end
+
+    -- Tricks
+    xpos = inputsFirstX
+    for i = 1, 6 do
+        self.createButton({label="", click_function="onNothing", function_owner=self,
+                          position = {xpos, zPos, 7.62}, width=0, height=0, font_size=240 })
+        xpos = xpos + inputsOffset
+        TrickLabels[i] = ButtonId
+        ButtonId = ButtonId + 1
+    end
+
+    -- Action Buttons
+    self.createButton({
+        label="<", click_function="onPrevDealer", function_owner=self,
+        position={2.0, zPos, 3.7}, width=670, height=260, font_size=400,
+        tooltip="Change the dealer during setup"
+    })
+    ButtonId = ButtonId + 1
+
+    self.createButton({
+        label=">", click_function="onNextDealer", function_owner=self,
+        position={7.0, zPos, 3.7}, width=670, height=260, font_size=400,
+        tooltip="Change the dealer during setup"
+    })
+    ButtonId = ButtonId + 1
+    
+    self.createButton({
+        label="Next", click_function="onNext", function_owner=self,
+        position={2.9, zPos, 5.2}, width=1770, height=560, font_size=400
+    })
+    NextButton = ButtonId
+    ButtonId = ButtonId + 1
+
+    self.createButton({
+        label="Reset", click_function="onReset", function_owner=self,
+        position={6.5, zPos, 5.2}, width=1470, height=560, font_size=400,
+        tooltip="Double click to reset."
+    })
+    ButtonId = ButtonId + 1
+
+    resetGame()
+    refreshSeatMap()
+    updateAll()
+end
+
+function onNext()
+    if State == State_Setup then 
+        FirstDealerSeat = Dealer
+        Round = 0
+        Scores = { }
+        beginNextRound()
+        enableTurns()
+    elseif State == State_Bid then
+        onBid()
+    elseif State == State_Play then
+        broadcastToAll("Please don't press this button again.")
+    elseif State == State_Done then
+        broadcastToAll("The game is over. Press reset to start over.")
+        disableTurns()
+    elseif State == State_PickSuit then
+        broadcastToAll(SeatMap[Dealer].Name .. ", please pick a suit from the menu at the top of the score card.")
+    end
+
+    updateAll()
+end
+
+function beginNextRound()
+    Round = Round + 1
+   
+    if (Round > MaxRounds[#SeatMap]) then 
+        local Winners = {}
+        local Score = 0
+        local FinalScores = Scores[MaxRounds[#SeatMap]]
+
+        for i = 1, #SeatMap do
+            if FinalScores[i].score > Score then
+                Score = FinalScores[i].score
+                Winners = {}
+                Winners[1] = SeatMap[i].Name
+            elseif FinalScores[i].score == Score then
+                Winners[#Winners+1] = SeatMap[i].Name
+            end
+        end
+
+        if #Winners == 1 then
+            broadcastToAll("Game over! " .. Winners[1] .. " won!")
+        else
+            broadcastToAll("Game over! " .. table.concat(Winners, " and ") .. " tied!")
+        end
+
+        State = State_Done
+        return
+    end
+
+    broadcastToAll("==== Starting hand " .. Round .. " ====")
+    State = State_Bid
+    recallPack()
+    dealCardsLater()
+    clearFields()
+    updateAll()
+
+    -- Figure out who deals next
+    Dealer = (((FirstDealerSeat - 1) + (Round - 1)) % (#SeatMap)) + 1
+    FirstPlayer = modValue(Dealer + 1, #SeatMap)
+    CurrentPlayerTurn = FirstPlayer
+
+    setTurnToCurrentPlayer()
+
+    Scores[Round] = { }
+    local scoreRow = Scores[Round]
+    for i = 1, #SeatMap do
+        scoreRow[i] = {
+            dealer = (i == Dealer),
+            bid = 0,
+            score = 0,
+            tricks = 0,
+            didBid = false,
+        }
+    end
+end
+
+function onBid()
+    local scoreRow = Scores[Round]
+    local needToBid = { }
+    for i = 1, #SeatMap do
+        if (scoreRow[i].didBid == false) then
+            needToBid[#needToBid + 1] = SeatMap[i].Name
+        end
+
+        if (scoreRow[i].bid > Round) then
+            scoreRow[i].bid = Round
+        end
+    end
+
+    if #needToBid > 0 then
+        local s = "The following player(s) still need to bid: " .. table.concat(needToBid, ", ")
+        broadcastToAll(s)
+        return
+    end
+
+    broadcastToAll(SeatMap[CurrentPlayerTurn].Name .. " plays first this hand.")
+
+    State = State_Play
+end
+
+function onRoundOver()
+    local scoreRow = Scores[Round]
+    PlayedCards = { }
+
+    lastScores = {0, 0, 0, 0, 0, 0}
+    if (Round > 1) then
+        local oldScoreRow = Scores[Round - 1]
+        for i = 1, #SeatMap do
+            lastScores[i] = oldScoreRow[i].score
+            if lastScores[i] == nil then
+                lastScores[i] = 0
+            end
+        end
+    end
+
+    for i = 1, #SeatMap do
+        local score = 0
+        if (scoreRow[i].bid - scoreRow[i].tricks == 0) then
+            score = 2 + scoreRow[i].tricks
+        else
+            score = -math.abs(scoreRow[i].bid - scoreRow[i].tricks)
+        end
+
+        scoreRow[i].score = lastScores[i] + score
+    end
+
+    beginNextRound()
+end
+
+function onReset(obj, player_clicker_color, alt_click)
+
+    if (State != State_Done) then
+        local now = os.clock()
+        local diff = now - ResetClickTime
+
+        ResetClickTime = now
+        if (diff > 0.5) then return end
+    end
+
+    local player = getPlayerNumberFromColor(player_clicker_color)
+    if player > 0 then 
+        broadcastToAll(SeatMap[player].Name .. " is resetting the game!")
+    end
+
+    resetGame()
+    refreshSeatMap()
+    updateAll()
+end
+
+function onPrevDealer()
+    if State != State_Setup then
+        return
+    end
+
+    Dealer = Dealer - 1
+    if (Dealer < 1) then
+        local seated = getSeatedPlayers()
+        Dealer = #seated
+    end
+
+    updateAll()
+end
+
+function onNextDealer()
+    if State != State_Setup then
+        return
+    end
+
+    local seated = getSeatedPlayers()
+    Dealer = Dealer + 1
+    if (Dealer > #seated) then
+        Dealer = 1
+    end
+
+    updateAll()
+end
+
+function currentRound()
+end
+
+function nextRound()
+end
+
+function refreshSeatMap()
+    local seated = getSeatedPlayers()
+    local total = #seated
+    if (total > 6) then total = 6 end
+
+    if State == State_Setup then
+        SeatMap = {}
+        for i = 1, #seated do
+            SeatMap[i] =  {
+                Color = seated[i],
+                Name = Player[seated[i]].steam_name,
+                Present = true
+            }
+        end
+
+        if (Dealer < 1 or Dealer > #seated) then
+            Dealer = #seated
+        end
+    else
+        for i = 1, #SeatMap do
+            SeatMap[i].Present = false
+            SeatMap[i].Name = "???"
+        end
+        for i = 1, #seated do
+            for j = 1, #SeatMap do
+                if SeatMap[i].Color == seated[i] then
+                    SeatMap[i].Present = true
+                    SeatMap[i].Name = Player[seated[i]].steam_name 
+                end
+            end
+        end
+    end
+
+    updateAll()
+end
+
+function onPlayerChangeColor(player_color)
+    refreshSeatMap()
+end
+function onPlayerConnect(player_id)
+    refreshSeatMap()
+end
+function onPlayerDisconnect(player_id)
+    refreshSeatMap()
+end
+
+function updateAll()
+    updateScores()
+    updateRound()
+    updateTricks()
+    updateSuits()
+    updatePlayers()
+end
+
+function updateRound()
+    if State == State_Setup then        
+        self.editButton({index = RoundLabel, label = "-"})
+        self.editButton({index = DealerLabel, label = SeatMap[Dealer].Name})
+        self.editButton({index = StateLabel, label = "Game Setup"})
+        self.editButton({index = NextButton, label = "Start", tooltip="Press this button to start the game."})
+    elseif State == State_Done then
+        self.editButton({index = RoundLabel, label = "-"})
+        self.editButton({index = DealerLabel, label = "-"})
+        self.editButton({index = StateLabel, label = "Game Over"})
+        self.editButton({index = NextButton, label = "Press Reset", tooltip="Don't press here, press the reset button."})
+    else
+        self.editButton({index = RoundLabel, label = Round})
+        self.editButton({index = DealerLabel, label = SeatMap[Dealer].Name})
+        if State == State_Bid then
+            self.editButton({index = StateLabel, label = "Enter Bids"})
+            self.editButton({index = NextButton, label = "Confirm", tooltip="Lock in everyone's bids."})
+        elseif State == State_Play then
+            self.editButton({index = StateLabel, label = "Play the Hand"})
+            self.editButton({index = NextButton, label = "", tooltip="Please don't press this button right now."})
+        elseif State == State_PickSuit then
+            self.editButton({index = StateLabel, label = SeatMap[Dealer].Name .. " Picking Suit"})
+            self.editButton({index = NextButton, label = "Pick Suit", tooltip="Click a button at the top of the score sheet to select the suit."})
+        end
+    end
+
+end
+
+function updateScores()
+    for i = 1, #Scores do
+        local scoreLine = Scores[i]
+        local labels = ScoreLabels[i]
+
+        for j = 1, #SeatMap do
+            if labels[j].bid > 0 then
+                dealer = ""
+                if scoreLine[j].dealer then
+                    dealer = "."
+                end
+                local score = ""
+                local tricks = ""
+                local bid = ""
+                if (Round > i) then 
+                    score = scoreLine[j].score 
+                    tricks = scoreLine[j].tricks
+                    bid = scoreLine[j].bid
+                elseif State > State_Bid then
+                    bid = scoreLine[j].bid
+                end
+
+                self.editButton({index = labels[j].score, label = score})
+                self.editButton({index = labels[j].bid, label = bid})
+                self.editButton({index = labels[j].tricks, label = tricks})
+                self.editButton({index = labels[j].dealer, label = dealer})
+            end
+        end
+        for j = #SeatMap + 1, 6 do
+            if labels[j].bid > 0 then
+                self.editButton({index = labels[j].score, label = ""})
+                self.editButton({index = labels[j].bid, label = ""})
+                self.editButton({index = labels[j].tricks, label = ""})
+                self.editButton({index = labels[j].dealer, label = ""})
+            end
+        end
+    end
+
+    for i = #Scores + 1, 20 do
+        local labels = ScoreLabels[i]
+
+        for j = 1, 6 do
+            if labels[j].bid > 0 then
+                self.editButton({index = labels[j].score, label = ""})
+                self.editButton({index = labels[j].bid, label = ""})
+                self.editButton({index = labels[j].tricks, label = ""})
+                self.editButton({index = labels[j].dealer, label = ""})
+            end
+        end
+    end
+end
+
+function updateTricks()
+    local scoreLine = Scores[Round]
+    for i = 1, 6 do 
+        local trickCount = ""
+        if scoreLine != nil and State > State_Bid then 
+            local score = scoreLine[i]
+            if score != nil then
+                trickCount = score.tricks
+                if trickCount == nil then
+                    trickCount = ""
+                end
+            end
+        end
+
+        self.editButton({index = TrickLabels[i], label = trickCount})
+    end
+end
+
+function updatePlayers()
+    for i = 1, #SeatMap do
+        self.editButton({index = NameLabels[i], label = SeatMap[i].Name})
+    end
+
+    if (#SeatMap < 6) then
+        for i = #SeatMap + 1, #NameLabels do
+            self.editButton({index = NameLabels[i], label = ""})
+        end
+    end
+end
+
+function updateSuits()
+    for i = 1, #Suits do
+        self.editButton({index = SuitLabels[i], label = Suits[i]})
+    end
+
+    for i = #Suits + 1, 20 do
+        self.editButton({index = SuitLabels[i], label = ""})
+    end
+end
+
+function disableTurns()
+    Turns.enable = false
+    Turns.type = 2
+    Turns.disable_interactations = false
+end
+
+function enableTurns()
+    Turns.enable = true
+    Turns.disable_interactations = true
+    Turns.type = 2
+    Turns.pass_turns = false
+    Turns.skip_empty_hands = false
+
+    local turnOrder = { }
+    for i = 1, #SeatMap do
+        turnOrder[i] = SeatMap[i].Color
+    end
+
+    Turns.order = turnOrder
+end
+
+function ensureCorrectTurn(player_color_prev, player_color_next)
+    -- At the beginning there's nothing in the seat map so there's
+    -- no need to check the current turn.
+    if (#SeatMap == 0) then return end
+
+    local currentColor = SeatMap[CurrentPlayerTurn].Color
+
+    if (player_color_next != currentColor) then
+        setTurnToCurrentPlayer()
+    end
+end
+
+function onPlayerTurnEnd(player_color_end, player_color_next)
+    ensureCorrectTurn(player_color_end, player_color_next)
+end
+
+function onPlayerTurnStart(player_color_start, player_color_previous)    
+    ensureCorrectTurn(player_color_previous, player_color_start)
+end
+
+function resetGame()
+    disableTurns()
+
+    State = State_Setup
+    FirstDealerSeat = 0
+    Round = 0
+    Dealer = 1
+    Scores = { }
+    SeatMap = { }
+    Suits = { }
+    Trump = "?"
+    TrumpName = "?"
+    PlayedCards = { }
+    recallPack()
+end
+
+Timers = 0
+function setInputValueLater(index, text)
+    Timers = Timers + 1
+    Timer.create({
+        identifier = "Timer" .. Timers,
+        function_name = "onSetInputExpired",
+        parameters = { index = index, text = text },
+        delay = 0,
+        repetitions = 1
+    })
+end
+
+function onSetInputExpired(params)
+    self.editInput({index = params.index, value = params.text})
+end
+
+function onObjectDestroy(dying_object)
+    if (dyingObject == Deck) then Deck = nil end
+end
+
+function onObjectSearchStart(object, player_color)
+    local player = getPlayerNumberFromColor(player_color)
+    broadcastToAll(SeatMap[player].Name .. " is examining the draw pile! Cheater!", TABLE_text_color)
+end
+
+function dealCardsLater()
+    startLuaCoroutine(self, "onDealCardsCoroutine")
+end
+
+function onDealCardsCoroutine(params)
+    for i = 1, 180 do
+        coroutine.yield(0)
+    end
+
+    -- Reset some things to a clean state.
+    DealtCards = { }
+    DontTouchList = { }
+    Deck.shuffle()
+
+    for i = 1, 180 do
+        coroutine.yield(0)
+    end
+
+    -- Get a list of the objects in the deck for use later.
+    local deckObjects = Deck.getObjects()
+
+    -- Set up the hands for each of the players.
+    local hands = {}
+    for i = 1, #SeatMap do
+        local hand = {}
+
+        -- Figure out which cards would be dealt to the player
+        -- by name.
+        for j = 1, Round do
+            hand[j] = deckObjects[(i) + (j-1) * 4].name
+        end
+
+        -- Sort the cards to make it easier for the player.
+        table.sort(hand, function(left, right)
+            suitL, rankL = cardNameToSuitRank(left)
+            suitR, rankR = cardNameToSuitRank(right)
+    
+            if suitL == suitR then
+                 return rankL > rankR 
+            else
+                 return suitToValue(suitL) > suitToValue(suitR)
+            end
+        end)
+
+        hands[i] = hand
+    end
+
+    -- Actually hand out the cards to each of the players.
+    for r = 1, Round do
+        for i = 1, #SeatMap do
+            -- Find the card we are going to be dealing out.
+            local name = hands[i][r]
+            local obj = findCard(name)
+
+            -- Pull it out of the deck from wherever it is.
+            local c = Deck.takeObject({ guid = obj.Card.guid })
+
+            -- Wait til the card is pulled, also makes for a more
+            -- satisfying animation.
+            for i=1,20 do
+                coroutine.yield(0)
+            end
+
+            -- Give the card to the player.
+            c.Deal(1, SeatMap[i].Color)
+    
+            -- Hang onto all of the information about the card that's been dealt out.
+            DealtCards[#DealtCards+1] = {
+                Card = c,
+                Owner = i,
+                Color = SeatMap[i].Color,
+                Rank = string.sub(name, 1, 1),
+                Suit = string.sub(name, 2, 2),
+                Name = name
+            }
+        end
+    end
+
+    -- If this isn't the last round, then pick a trump
+    if Round < MaxRounds[#SeatMap] then
+        TrumpCard = Deck.takeObject({top = true})
+        DontTouchList[1] = TrumpCard
+        TrumpCard.flip()
+        Trump = string.sub(TrumpCard.getName(), 2, 2)
+    else
+        -- Last round, that's no trump.
+        Trump = 'J'
+        TrumpName = "No Trump"
+        TrumpCard = nil
+    end
+
+    if (Trump == "H") then
+        TrumpName = "Hearts"
+        Suits[Round] = 'H'
+    elseif (Trump == "C") then
+        TrumpName = "Clubs"
+        Suits[Round] = 'C'
+    elseif (Trump == "S") then
+        TrumpName = "Spades"
+        Suits[Round] = 'S'
+    elseif (Trump == "D") then
+        TrumpName = "Diamonds"
+        Suits[Round] = 'D'
+    elseif (Trump == "J") then
+        TrumpName = "No Trump"
+        Suits[Round] = 'N'
+    elseif (Trump == "W") then
+        TrumpName = "Wizard"
+        Suits[Round] = '*'
+        State = State_PickSuit
+        broadcastToAll("Turned a Wizard as trump!")
+        broadcastToAll(SeatMap[Dealer].Name .. " please pick the trump suit from the top of the score sheet!")
+        showSuitPicker()
+        onNext()
+    end
+
+    if (Trump != "W") then 
+        if (Trump == "J") then
+            if (Round < MaxRounds[#SeatMap]) then
+                broadcastToAll("Final hand, no trump!")
+            else
+                broadcastToAll("No trump this hand!")
+            end
+        else
+            broadcastToAll(TrumpName .. " is trump for this hand.")
+        end
+        broadcastToAll(SeatMap[FirstPlayer].Name .. " bids first.")
+    end
+
+    updateAll()
+    return 1
+end
+
+function onBidChanged(index, player_clicker_color, input_value, selected)
+    local scoreRow = Scores[Round]
+
+    if (index > #SeatMap) then
+        if input_value == nil or input_value == "" then return end
+        setInputValueLater(BidInputs[index], "")
+        broadcastToColor("That player is not playing.", player_clicker_color)
+        return
+    end
+
+    if (Round < 1 or State < State_Bid) then
+        if input_value == nil or input_value == "" then return end
+        setInputValueLater(BidInputs[index], "")
+        broadcastToColor("It is not time to bid yet.", player_clicker_color)
+        return
+    end
+
+    if (State > State_Bid) then
+        setInputValueLater(BidInputs[index], scoreRow[index].bid)
+        broadcastToColor("You can't change your bid now.", player_clicker_color)
+        return
+    end
+
+    firstIndex = modValue(Dealer + 1, #SeatMap)
+
+    if index != firstIndex then
+        checkSeat = index - 1
+        if checkSeat < 1 then checkSeat = #SeatMap end
+        if not scoreRow[checkSeat].didBid then
+            if input_value == nil or input_value == "" then return end
+            setInputValueLater(BidInputs[index], "")
+            broadcastToColor("Please wait until " .. SeatMap[checkSeat].Name .. " has bid.", player_clicker_color)
+            return
+        end
+    end
+   
+    local bid = tonumber(input_value)
+    if (bid == nil) then return end
+    if bid < 0 then bid = 0 end
+    if bid > Round then bid = Round end
+    
+    scoreRow[index].bid = bid
+    scoreRow[index].didBid = not (input_value == nil or input_value == '')
+
+    if not selected then
+        setInputValueLater(BidInputs[index], bid)
+    end
+end
+
+CreatedDeck = nil
+CreatedDiscardDeck = nil
+
+function addToDeck(card)
+    if (Deck == nil) then
+        CaptureEnterContainer = true
+        Deck = card
+    else
+        Deck.putObject(card)
+        Deck = CreatedDeck
+    end
+end
+
+function addToDiscardDeck(card)
+
+    return pcall(function()
+        card.setLock(false)
+
+        DontTouchList[#DontTouchList+1] = card
+        
+        if not card.is_face_down then
+            card.flip()
+        end
+        
+        card.drop()
+        
+        card.setPositionSmooth(DiscardDeckPosition, false, false)
+    end)
+
+    --[[
+    Discarding = true
+    DontTouchList[#DontTouchList+1] = card
+    if not card.is_face_down then
+        card.flip()
+    end
+    card.drop()
+
+    if DiscardDeck != nil then
+        DiscardDeck.setLock(false)
+    end
+
+    if (DiscardDeck == nil) then
+        CaptureEnterContainer = true
+        DiscardDeck = card
+        DiscardDeck.setPositionSmooth(DiscardDeckPosition, false, false)
+    else
+        DiscardDeck.putObject(card)
+        DiscardDeck = CreatedDiscardDeck
+    end
+
+    DiscardDeck.setLock(true)
+    Discarding = false--]]
+end
+
+function clearFields()
+    for i = 1, 6 do
+        self.editInput({index = BidInputs[i], value = ""})
+    end
+end
+
+Recalling = false
+Discarding = false
+
+function unlockDeck()
+    Deck.setLock(false)
+end
+
+function makePlayerDropCards()
+    playerList = Player.getPlayers()
+    for _, playerReference in ipairs(playerList) do
+        local souls = playerReference.getHoldingObjects()
+        if souls != nil then
+            for i = 1, #souls do
+                souls[i].drop()
+            end
+        end
+    end
+end
+
+function recallPack()
+    local souls = getAllObjects()
+    local deck = nil
+
+    makePlayerDropCards()	
+
+    status, result = pcall(unlockDeck)
+
+    if (DiscardDeck != nil) then DiscardDeck.setLock(false) end
+
+    DiscardDeck = nil
+    Deck = nil
+    Recalling = true
+
+    for i,soul in ipairs(souls) do
+        -- For some reason "soul.name" only returns the object name
+        -- even if it has a nickname on it, so my solution was this:
+        local soulName = tostring(soul.getName())
+        local soulTag = soul.tag
+        local soulGuid = soul.getGUID()
+
+        if (soulTag == 'Card') then
+            soul.setLock(false)
+            addToDeck(getObjectFromGUID(soulGuid))
+        elseif soulTag == 'Deck' then
+            soul.setLock(false)
+            addToDeck(soul)
+        end
+    end
+
+    if not Deck.is_face_down then 
+        Deck.flip()
+    end
+
+    Recalling = false
+    Deck.setPosition(DeckPosition, false, true)
+    Deck.setLock(true)
+end
+
+-- Need to capture when a container gets created...
+function onObjectEnterContainer(container, enter_object)
+    if (Recalling) then
+        CreatedDeck = container
+        return
+    end
+    if (Discarding) then
+        CreatedDiscardDeck = container
+        return
+    end
+end
+
+-- 
+
+CardOverScriptingZone = nil
+
+function onObjectEnterScriptingZone(zone, enter_object)
+    if (zone.getGUID() != ScriptingZone) then return end
+    if (enter_object.tag != 'Card') then return end
+    CardOverScriptingZone = enter_object
+end
+
+function onObjectLeaveScriptingZone(zone, leave_object)
+    if (zone.getGUID() != ScriptingZone) then return end
+    if (leave_object.tag != 'Card') then return end
+    CardOverScriptingZone = nil
+end
+
+function onObjectDrop(player_color, dropped_object)
+    cardName = dropped_object.getName()
+    cardDesc = dropped_object.getDescription()
+
+    if (State == State_Setup or State == State_Done) then return end
+
+    -- If a card was moved out of the play area, move it back.
+    if (PlayedCards != nil) then
+        for i = 1, #PlayedCards do
+            if PlayedCards[i].Name == cardName then
+                local home = getObjectFromGUID(ScriptingZone)
+                local homeBounds = home.getBounds()
+                local homePos = 
+                {
+                    homeBounds.center.x + math.random() * 30 - 15,
+                    homeBounds.center.y,
+                    homeBounds.center.z + math.random() * 20 - 12.5,
+                }
+            
+                broadcastToColor("Hey! Put that back!", player_color)
+                dropped_object.setPositionSmooth(homePos, false, false)
+                return
+            end
+        end
+    end
+
+    -- If the card wasn't dealt to the player move it off the 
+    -- board. 
+    if (DealtCards != nil) then
+        local found = false
+        for i = 1, #DealtCards do
+            if cardName == DealtCards[i].Name then
+                found = true
+            end
+        end
+
+        if not found then
+            broadcastToColor("Hey! That doesn't belong here!", player_color)
+            dropped_object.setPositionSmooth(BadPlayPosition, false, false)
+            return
+        end
+    end
+    
+    if (CardOverScriptingZone == nil) then 
+        dropped_object.deal(1, player_color)
+        return
+    end
+
+    CardOverScriptingZone = nil
+
+    local player = getPlayerNumberFromColor(player_color)
+
+    if (player == 0) then
+        print("Player is 0 -- that's bad.")
+        return
+    end
+
+    if (validateCard(cardName, player)) then
+        cardDesc = dropped_object.getDescription()
+        broadcastToAll(SeatMap[CurrentPlayerTurn].Name .. " played the " .. cardDesc)
+        csuit, crank = cardNameToSuitRank(cardName)
+
+        PlayedCards[#PlayedCards + 1] = 
+        {
+            Card = dropped_object,
+            Name = cardName,
+            Description = cardDesc,
+            Player = player,
+            Rank = crank,
+            Suit = csuit
+        }
+
+        checkHand()
+    else
+        dropped_object.deal(1, player_color)
+    end
+
+end
+
+function collectDiscards()
+    -- pick up the cards on the mat
+    for i = 1, #PlayedCards do
+        -- If the player is holding a card over a card that's being collected
+        -- it can't be collected. And everything breaks.
+        local cardResult = findCard(PlayedCards[i].Name)
+        local card = cardResult.Card
+        if (cardResult.InDeck) then
+            if not pcall(function()
+                card = cardResult.InDeck.takeObject({ guid = card.Card.guid })
+            end) then
+                if not pcall(function()
+                    card = cardResult.InDeck.takeObject({ guid = card.Card.getGuid() })
+                end) then
+                    print("This is emabarassing...")
+                end
+            end
+        end
+
+        if not addToDiscardDeck(card) then
+            print("Can't clean up " .. PlayedCards[i].Name)
+            print("You might be able to finish the hand")
+        end
+    end
+end
+
+function finishCheckHandLater()
+    startLuaCoroutine(self, "onFinishCheckHand")
+end
+
+Winner = {}
+
+function onFinishCheckHand()
+    -- Wait a bit
+    for i = 0,60*5 do
+        coroutine.yield(0)
+
+        -- If the player tries to fuck around, things go sour.
+        -- So this will prevent that hopefully.
+        makePlayerDropCards()
+    end
+
+    -- Cards left for the round?
+    local scoreLine = Scores[Round]
+    local tricksTaken = 0
+    for i = 1, #scoreLine do
+        tricksTaken = tricksTaken + scoreLine[i].tricks
+    end
+
+    if tricksTaken >= Round then
+        onRoundOver()
+    else
+        CurrentPlayerTurn = Winner.Player
+
+        collectDiscards()
+
+        PlayedCards = { }
+        Winner = { }
+
+        setTurnToCurrentPlayer()
+    end
+
+    return 1
+end
+
+function checkHand()
+    if (#PlayedCards == #SeatMap) then
+        -- Round is over
+        -- Determine the winner
+        Winner = PlayedCards[1]
+        for i = 2, #PlayedCards do
+            if Winner.Suit != 'W' then
+                local checker = PlayedCards[i]
+                if checker.Suit == 'J' then
+                    -- It's not a winner for sure...
+                elseif checker.Suit == "W" then
+                    Winner = checker
+                else
+                    if checker.Suit == Winner.Suit then
+                        if checker.Rank > Winner.Rank then
+                            Winner = checker
+                        end
+                    elseif checker.Suit == Trump then
+                        Winner = checker
+                    end
+                end
+            end    
+        end
+
+        broadcastToAll(SeatMap[Winner.Player].Name .. " won the trick with the " .. Winner.Description)
+
+        -- Increment the player's tricks
+        local scoreLine = Scores[Round]
+        scoreLine[Winner.Player].tricks = scoreLine[Winner.Player].tricks + 1
+
+        updateAll()
+        finishCheckHandLater()
+    else
+        -- Next player needs to play
+        CurrentPlayerTurn = modValue(CurrentPlayerTurn + 1, #SeatMap)
+        setTurnToCurrentPlayer()
+    end
+end
+
+function onObjectPickUp(player_color, picked_up_object)
+    if Discarding or Recalling then 
+        picked_up_object.drop()
+        broadcastToColor("Leave it!", player_color)
+    end
+
+    if DontTouchList == nil then return end
+    for i = 1, #DontTouchList do 
+        if picked_up_object == DontTouchList[i] then
+            picked_up_object.drop()
+            broadcastToColor("Leave it!", player_color)
+        end
+    end
+
+    local number = getPlayerNumberFromColor(player_color)
+    
+    for i = 1, #DealtCards do
+        if DealtCards[i].Owner != number and DealtCards[i].Card == picked_up_object then
+            picked_up_object.drop()
+            broadcastToColor("You can only play cards that were dealt to you!", player_color)
+        end
+    end
+end
+
+function validateCard(cardName, player)
+    if player != CurrentPlayerTurn then
+        broadcastToAll("It's still " .. SeatMap[CurrentPlayerTurn].Name .. "'s turn!")
+        return false
+    end
+
+    if State != State_Play then
+        broadcastToAll("Please bid first!")
+        return false
+    end
+
+    if #PlayedCards == 0 then
+        -- Nobody played yet, so yea, it's probably okay
+        return true
+    end
+
+    for i = 1, #PlayedCards do
+        if (PlayedCards[i].Player == player) then
+            broadcastToAll("Hold yer horses. You've already played!")
+            return false
+        end
+    end
+
+    -- Check if player has already played
+    --[[
+    for i,played in ipairs(PlayedCards) do
+        if played.player == player then
+            broadcastToAll("You already played!")
+            return false
+        end
+    end
+    ]]--
+
+    suit, rank = cardNameToSuitRank(cardName)
+
+    -- Can always play a Wizard or Jester
+    if (suit == 'W' or suit == 'J') then
+        return true
+    end
+
+    -- Determine the current suit
+    currentSuit = nil
+    for i = 1, #PlayedCards do 
+        if currentSuit == nil then
+            if PlayedCards[i].Suit == 'W' then
+                currentSuit = 'W'
+            elseif PlayedCards[i].Suit == 'J' then
+                -- Skip jesters
+            else
+                currentSuit = PlayedCards[i].Suit
+            end
+        end               
+    end
+
+    -- If a wizard is led, or was played after only jesters
+    -- then any card is valid
+    if currentSuit == 'W' or currentSuit == nil then
+        return true
+    end
+
+    -- Can always play a card in suit.
+    if currentSuit == suit then
+        return true
+    end
+
+    -- Determine what cards are in the player's hand
+    local handObjects = Player[SeatMap[player].Color].GetHandObjects(1)
+    local hand = {}
+    for i,o in ipairs(handObjects) do
+        hand[i] = {
+            Rank = string.sub(o.getName(), 1, 1),
+            Suit = string.sub(o.getName(), 2, 2)
+        }
+    end
+
+    -- If they're playing out of suit, then we need to see if they're
+    -- cheating or not.
+    for i = 1, #hand do
+        if (currentSuit == hand[i].Suit) then
+            broadcastToAll("You can't play that card since you still have other valid plays...")
+            return false
+        end
+    end
+
+    -- 
+    return true
+end
+
+function onPickSuit(suit, suitName, playerColor)
+    if (SeatMap[Dealer].Color != playerColor) then
+        broadcastToColor("Sorry only " .. SeatMap[Dealer].Name .. ", the dealer, is allowed to pick the trump suit.", playerColor)
+        return
+    end
+
+    Suits[Round] = suit .. "*"
+    Trump = suit
+    TrumpName = suitName
+    State = State_Bid
+
+    broadcastToAll(SeatMap[Dealer].Name .. " selected " .. TrumpName .. " as trump for the hand.")
+    broadcastToAll(SeatMap[FirstPlayer].Name .. " bids first.")
+
+    hideSuitPicker()
+    updateAll()
+end
+
+function onPickHearts(obj, player_clicker_color, alt_click)
+    onPickSuit("H", "Hearts", player_clicker_color)
+end
+
+function onPickClubs(obj, player_clicker_color, alt_click)
+    onPickSuit("C", "Clubs", player_clicker_color)
+end
+
+function onPickDiamonds(obj, player_clicker_color, alt_click)
+    onPickSuit("D", "Diamonds", player_clicker_color)
+end
+
+function onPickSpades(obj, player_clicker_color, alt_click)
+    onPickSuit("S", "Spades", player_clicker_color)
+end
+
+-- Suit picker
+
+SuitPickerVisible = false
+SuitPickerFirstInputId = 0
+
+function showSuitPicker()
+    if (SuitPickerVisible) then return end
+    SuitPickerVisible = true
+
+    local buttons = self.getButtons()
+    SuitPickerFirstInputId = #buttons 
+
+    local inputsFirstX = -5.25
+    local inputsOffset = 3.685
+    local inputsWidth = 1800
+    local inputsHeight = 500
+
+    xpos = inputsFirstX
+    self.createButton({click_function="onPickHearts", function_owner = self, alignment=3, validation=2,
+    position = {xpos, zPos, -7.50}, width=inputsWidth, height=inputsHeight, font_size=350, label="Hearts" })
+    xpos = xpos + inputsOffset
+    
+    self.createButton({click_function="onPickClubs", function_owner = self, alignment=3, validation=2,
+    position = {xpos, zPos, -7.50}, width=inputsWidth, height=inputsHeight, font_size=350, label="Clubs" })
+    xpos = xpos + inputsOffset
+    
+    self.createButton({click_function="onPickDiamonds", function_owner = self, alignment=3, validation=2,
+    position = {xpos, zPos, -7.50}, width=inputsWidth, height=inputsHeight, font_size=350, label="Diamonds" })
+    xpos = xpos + inputsOffset
+    
+    self.createButton({click_function="onPickSpades", function_owner = self, alignment=3, validation=2,
+    position = {xpos, zPos, -7.50}, width=inputsWidth, height=inputsHeight, font_size=350, label="Spades" })
+
+end
+
+function hideSuitPicker()
+    if (not SuitPickerVisible) then return end
+
+    for i = 1, 4 do
+        self.removeButton(SuitPickerFirstInputId + i - 1)
+    end
+
+    SuitPickerVisible = false
+end
+
+-- Fuck this bullshit.
+
+function onBid1Changed(obj, player_clicker_color, input_value, selected)
+    onBidChanged(1, player_clicker_color, input_value, selected)
+end
+function onBid2Changed(obj, player_clicker_color, input_value, selected)
+    onBidChanged(2, player_clicker_color, input_value, selected)
+end
+function onBid3Changed(obj, player_clicker_color, input_value, selected)
+    onBidChanged(3, player_clicker_color, input_value, selected)
+end
+function onBid4Changed(obj, player_clicker_color, input_value, selected)
+    onBidChanged(4, player_clicker_color, input_value, selected)
+end
+function onBid5Changed(obj, player_clicker_color, input_value, selected)
+    onBidChanged(5, player_clicker_color, input_value, selected)
+end
+function onBid6Changed(obj, player_clicker_color, input_value, selected)
+    onBidChanged(6, player_clicker_color, input_value, selected)
+end
+
+function onTricks1Changed(obj, player_clicker_color, input_value, selected)
+    onTricksChanged(1, player_clicker_color, input_value, selected)
+end
+function onTricks2Changed(obj, player_clicker_color, input_value, selected)
+    onTricksChanged(2, player_clicker_color, input_value, selected)
+end
+function onTricks3Changed(obj, player_clicker_color, input_value, selected)
+    onTricksChanged(3, player_clicker_color, input_value, selected)
+end
+function onTricks4Changed(obj, player_clicker_color, input_value, selected)
+    onTricksChanged(4, player_clicker_color, input_value, selected)
+end
+function onTricks5Changed(obj, player_clicker_color, input_value, selected)
+    onTricksChanged(5, player_clicker_color, input_value, selected)
+end
+function onTricks6Changed(obj, player_clicker_color, input_value, selected)
+    onTricksChanged(6, player_clicker_color, input_value, selected)
+end
+
+-- Utility Functions
+function setTurnToCurrentPlayer()
+    startLuaCoroutine(self, "setTurnToCurrentPlayerCoroutine")
+end
+
+function setTurnToCurrentPlayerCoroutine()
+    coroutine.yield(0)
+
+    if Turns.turn_color != SeatMap[CurrentPlayerTurn].Color then
+        Turns.turn_color = SeatMap[CurrentPlayerTurn].Color
+    end
+
+    return 1
+end
+
+function getPlayerNumberFromColor(player_color)
+    for i,seat in ipairs(SeatMap) do
+        if seat.Color == player_color then
+            return i
+        end
+    end
+
+    return 0
+end
+
+function cardNameToSuitRank(name)
+    local rank = string.sub(name, 1, 1)
+    local suit = string.sub(name, 2, 2)
+
+    nrank = -1
+    if rank == 'K' then nrank = 13
+    elseif rank == 'Q' then nrank = 12
+    elseif rank == 'J' then nrank = 11
+    elseif rank == 'T' then nrank = 10
+    elseif rank == 'A' then nrank = 14
+    else nrank = tonumber(rank) end
+
+    return suit, nrank
+end
+
+function suitToValue(suit)
+    if suit == 'W' then return 6
+    elseif suit == 'J' then return 5
+    elseif suit == 'H' then return 4
+    elseif suit == 'C' then return 3
+    elseif suit == 'D' then return 2
+    elseif suit == 'S' then return 1
+    end
+
+    return 0
+end
+
+function modValue(value, max)
+    return ((value - 1) % max) + 1
+end
+
+function findCard(name)
+    return findCardIn(name, getAllObjects(), nil)
+end
+
+-- Recursively search for a card with a given name.
+function findCardIn(name, souls, inDeck)
+    for i,soul in ipairs(souls) do
+        local soulTag = soul.tag or "NoTag"
+        local soulName = soul.getName and soul.getName() or soul.name or "No Name"
+        if (soulTag == 'Card' or soulTag == "NoTag") then
+            if soulName == name then 
+                return {
+                    Card = soul,
+                    InDeck = inDeck
+                }
+            end
+        elseif (soulTag == 'Deck' or soulTag == 'Scripting') then
+            local itemInDeck = findCardIn(name, soul.getObjects(), soul)
+            if (itemInDeck != nil and itemInDeck.Card != nil) then 
+                return {
+                    Card = itemInDeck.Card,
+                    InDeck = soulTag == 'Deck' and soul or nil
+                }
+            end
+        end
+    end
+
+    return {
+        Card = nil,
+        InDeck = nil
+    }
+end
+
+
+function isObjectInHandZone(soul)
+    for i, color in ipairs(Player.getAvailableColors()) do
+        local player = Player[color]
+        local handObjects = player.GetHandObjects(1)
+        if handObjects != nil then 
+            for i, handObject in ipairs(handObjects) do
+                if handObject == soul then return color end
+            end
+        end
+    end
+
+    return nil
+end
