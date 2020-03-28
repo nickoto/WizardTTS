@@ -898,6 +898,7 @@ end
 function resetRound()
     -- Can't reset the round if we aren't in a game.
     if State == State_Setup or State == State_Done then
+        printToAll("The round cannot be reset right now. Please start a game.")
         return
     end
 
@@ -1493,6 +1494,8 @@ function commandHandler(playerColor, commandLine)
         end
     elseif (command == "start") then
         onCommandStart()
+    elseif (command == "becomedealer") then
+        onCommandBecomeDealer(playerColor)
     else
         printToAll("Unknown command: '" .. command .. "'. Type !help for help.")
     end
@@ -1504,7 +1507,10 @@ function onCommandHelp()
     printToAll("All commands are prefixed with an !")
     printToAll("!help - Show this help text.")
     printToAll("!reset [game|round] - Reset the game or redeal the round.")
+    printToAll("")
+    printToAll("Commands available before the game has started")
     printToAll("!start - Start the game if it hasn't been started")
+    printToAll("!becomeDealer - Makes your player become the dealer")
 end
 
 function onCommandReset(argument)
@@ -1523,6 +1529,20 @@ function onCommandStart()
     else
         printToAll("!start requires the game to be in a reset state")
     end
+end
+
+function onCommandBecomeDealer(playerColor)
+    if State != State_Setup then 
+        printToAll("Can't change the dealer after the game has started")
+    end
+
+    for i = 1, #SeatMap do
+        if SeatMap[i].Color == playerColor then
+            Dealer = i
+        end
+    end
+
+    updateAll()
 end
 
 --------------------------------------------
