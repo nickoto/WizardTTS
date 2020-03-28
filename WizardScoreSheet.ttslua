@@ -322,6 +322,14 @@ end
 --= Tabletop Simulator Event Handlers
 --------------------------------------------
 
+function onChat(message, player)
+    if (string.sub(message, 1, 1) != '!') then
+        return
+    end
+
+    commandHandler(playerId, string.sub(message, 2))
+end
+
 -- TODO: Implement onSave
 
 function onLoad(save_state)
@@ -885,6 +893,18 @@ function resetGame()
     recallPack()
     refreshSeatMap()
     updateAll()
+end
+
+function resetRound()
+    -- Can't reset the round if we aren't in a game.
+    if State == State_Setup or State == State_Done then
+        return
+    end
+
+    -- Pretend it is the beginning of a new round
+    Round = Round - 1
+    PlayedCards = { }
+    beginNextRound()
 end
 
 Timers = 0
@@ -1460,10 +1480,62 @@ end
 --------------------------------------------
 --= Console Handlers
 --------------------------------------------
+function commandHandler(playerColor, commandLine)
+    local parts = split(commandLine, " ")
+    local command = string.lower(parts[1])
+    if (command == "help") then
+        onCommandHelp()
+    elseif (command == "reset") then
+        if (#parts != 2) then
+            printToAll("reset needs an argument")            
+        else
+            onCommandReset(string.lower(parts[2]))
+        end
+    elseif (command == "start") then
+        onCommandStart()
+    else
+        printToAll("Unknown command: '" .. command .. "'. Type !help for help.")
+    end
+end
+
+function onCommandHelp()
+    printToAll("Wizard Help")
+    printToAll("-----------")
+    printToAll("All commands are prefixed with an !")
+    printToAll("!help - Show this help text.")
+    printToAll("!reset [game|round] - Reset the game or redeal the round.")
+    printToAll("!start - Start the game if it hasn't been started")
+end
+
+function onCommandReset(argument)
+    if (argument == "game") then
+        resetGame()
+    elseif (argument == "round") then
+        resetRound()
+    else
+        printToAll("!reset invalid argument")
+    end
+end
+
+function onCommandStart()
+    if State == State_Setup then 
+        onNextClicked()
+    else
+        printToAll("!start requires the game to be in a reset state")
+    end
+end
 
 --------------------------------------------
 --= Utility Functions
 --------------------------------------------
+function split(str)
+    local tbl = {}
+    for i in string.gmatch(str, "%S+") do
+        tbl[#tbl+1] = i
+    end
+    return tbl
+end
+ 
 function setTurnToCurrentPlayer()
     startLuaCoroutine(self, "setTurnToCurrentPlayerCoroutine")
 end
