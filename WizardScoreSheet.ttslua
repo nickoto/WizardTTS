@@ -1,33 +1,47 @@
+-- Cards must be named as follows, one pair for each of the cards in a wizard deck.
+-- As long as these cards are present the script should be able to figure out what
+-- to do.
+-- [A23456789TJQK][HCDS] or [1234][WJ]
 
--- Configure the scripting zone.
-ScriptingZone = '8fa5bc'
+-- GUID Configuration
+-- If placing this object into a new board these are the GUIDs that the
+-- script requires.
+PlayAreaScriptingZone = '8fa5bc'
 
-NameLabels = { }
-SuitLabels = { }
-ScoreLabels = { }
-BidInputs = { }
-TrickLabels = { }
+-- Game constants
+MaxRounds = { 20, 20, 20, 15, 12, 10 }
+DeckPosition = {x=34.26, y=1.09, z=0.0}
+DiscardDeckPosition = {x=34.26, y=1.09, z=12.0}
+BadPlayPosition = {x=34.26, y=1.09, z=-12.0}
 
-RoundLabel = 0
-DealerLabel = 0
-StateLabel = 0
-NextButton = 0
-
+-- Game State "Machine"
 State_Setup = 0
 State_PickSuit = 1
 State_Bid = 2
 State_Play = 3
 State_Done = 4
 
-MaxRounds = { 20, 20, 20, 15, 12, 10 }
+-- User Interface Stuff
+NameLabels = { }
+SuitLabels = { }
+ScoreLabels = { }
+BidInputs = { }
+TrickLabels = { }
 
-DeckPosition = {x=34.26, y=1.09, z=0.0}
-DiscardDeckPosition = {x=34.26, y=1.09, z=12.0}
-BadPlayPosition = {x=34.26, y=1.09, z=-12.0}
+SuitPickerVisible = false
+SuitPickerFirstInputId = 0
 
----
---- Game info
----
+RoundLabel = 0
+DealerLabel = 0
+StateLabel = 0
+NextButton = 0
+
+zPos = 0.6
+zPosHidden = -2
+
+--------------------------------------------
+--= Game State Info
+--------------------------------------------
 State = State_Setup
 FirstDealerSeat = 0
 Round = 0
@@ -91,9 +105,14 @@ Deck = nil
 DicardDeck = nil
 TrumpCard = nil
 
-zPos = 0.6
-zPosHidden = -2
+--------------------------------------------
+--= Initialization
+--------------------------------------------
 
+
+--------------------------------------------
+--= UI Management Functions
+--------------------------------------------
 function createScoreBits(xpos, ypos)
     self.createButton({
         label="", click_function="onNothing", function_owner=self,
@@ -113,9 +132,7 @@ function createScoreBits(xpos, ypos)
     })
 end
 
-
-function onLoad(save_state)
-
+function createUI()
     local ButtonId = 0
 
     -- First create the name plates.
@@ -246,7 +263,7 @@ function onLoad(save_state)
     ButtonId = ButtonId + 1
     
     self.createButton({
-        label="Next", click_function="onNext", function_owner=self,
+        label="Next", click_function="onNextClicked", function_owner=self,
         position={2.9, zPos, 5.2}, width=1770, height=560, font_size=400
     })
     NextButton = ButtonId
@@ -258,33 +275,222 @@ function onLoad(save_state)
         tooltip="Double click to reset."
     })
     ButtonId = ButtonId + 1
+end
 
+-- Suit Picker
+
+function showSuitPicker()
+    if (SuitPickerVisible) then return end
+    SuitPickerVisible = true
+
+    local buttons = self.getButtons()
+    SuitPickerFirstInputId = #buttons 
+
+    local inputsFirstX = -5.25
+    local inputsOffset = 3.685
+    local inputsWidth = 1800
+    local inputsHeight = 500
+
+    xpos = inputsFirstX
+    self.createButton({click_function="onPickHearts", function_owner = self, alignment=3, validation=2,
+    position = {xpos, zPos, -7.50}, width=inputsWidth, height=inputsHeight, font_size=350, label="Hearts" })
+    xpos = xpos + inputsOffset
+    
+    self.createButton({click_function="onPickClubs", function_owner = self, alignment=3, validation=2,
+    position = {xpos, zPos, -7.50}, width=inputsWidth, height=inputsHeight, font_size=350, label="Clubs" })
+    xpos = xpos + inputsOffset
+    
+    self.createButton({click_function="onPickDiamonds", function_owner = self, alignment=3, validation=2,
+    position = {xpos, zPos, -7.50}, width=inputsWidth, height=inputsHeight, font_size=350, label="Diamonds" })
+    xpos = xpos + inputsOffset
+    
+    self.createButton({click_function="onPickSpades", function_owner = self, alignment=3, validation=2,
+    position = {xpos, zPos, -7.50}, width=inputsWidth, height=inputsHeight, font_size=350, label="Spades" })
+
+end
+
+function hideSuitPicker()
+    if (not SuitPickerVisible) then return end
+
+    for i = 1, 4 do
+        self.removeButton(SuitPickerFirstInputId + i - 1)
+    end
+
+    SuitPickerVisible = false
+end
+--------------------------------------------
+--= Tabletop Simulator Event Handlers
+--------------------------------------------
+
+-- TODO: Implement onSave
+
+function onLoad(save_state)
+    createUI()
     resetGame()
     refreshSeatMap()
     updateAll()
 end
 
-function onNext()
-    if State == State_Setup then 
-        FirstDealerSeat = Dealer
-        Round = 0
-        Scores = { }
-        beginNextRound()
-        enableTurns()
-    elseif State == State_Bid then
-        onBid()
-    elseif State == State_Play then
-        broadcastToAll("Please don't press this button again.")
-    elseif State == State_Done then
-        broadcastToAll("The game is over. Press reset to start over.")
-        disableTurns()
-    elseif State == State_PickSuit then
-        broadcastToAll(SeatMap[Dealer].Name .. ", please pick a suit from the menu at the top of the score card.")
-    end
-
-    updateAll()
+function onPlayerChangeColor(player_color)
+    refreshSeatMap()
 end
 
+function onPlayerConnect(player_id)
+    refreshSeatMap()
+end
+
+function onPlayerDisconnect(player_id)
+    refreshSeatMap()
+end
+
+function onPlayerTurnStart(player_color_start, player_color_previous)    
+    ensureCorrectTurn(player_color_previous, player_color_start)
+end
+
+function onPlayerTurnEnd(player_color_end, player_color_next)
+    ensureCorrectTurn(player_color_end, player_color_next)
+end
+
+function onObjectDestroy(dying_object)
+    if (dyingObject == Deck) then Deck = nil end
+end
+
+function onObjectSearchStart(object, player_color)
+    local player = getPlayerNumberFromColor(player_color)
+    broadcastToAll(SeatMap[player].Name .. " is examining the draw pile! Cheater!", TABLE_text_color)
+end
+
+-- Need to capture when a container gets created...
+function onObjectEnterContainer(container, enter_object)
+    if (Recalling) then
+        CreatedDeck = container
+        return
+    end
+    if (Discarding) then
+        CreatedDiscardDeck = container
+        return
+    end
+end
+
+CardOverScriptingZone = nil
+
+function onObjectEnterScriptingZone(zone, enter_object)
+    if (zone.getGUID() != PlayAreaScriptingZone) then return end
+    if (enter_object.tag != 'Card') then return end
+    CardOverScriptingZone = enter_object
+end
+
+function onObjectLeaveScriptingZone(zone, leave_object)
+    if (zone.getGUID() != PlayAreaScriptingZone) then return end
+    if (leave_object.tag != 'Card') then return end
+    CardOverScriptingZone = nil
+end
+
+function onObjectPickUp(player_color, picked_up_object)
+    if Discarding or Recalling then 
+        picked_up_object.drop()
+        broadcastToColor("Leave it!", player_color)
+    end
+
+    if DontTouchList == nil then return end
+    for i = 1, #DontTouchList do 
+        if picked_up_object == DontTouchList[i] then
+            picked_up_object.drop()
+            broadcastToColor("Leave it!", player_color)
+        end
+    end
+
+    local number = getPlayerNumberFromColor(player_color)
+    
+    for i = 1, #DealtCards do
+        if DealtCards[i].Owner != number and DealtCards[i].Card == picked_up_object then
+            picked_up_object.drop()
+            broadcastToColor("You can only play cards that were dealt to you!", player_color)
+        end
+    end
+end
+
+function onObjectDrop(player_color, dropped_object)
+    cardName = dropped_object.getName()
+    cardDesc = dropped_object.getDescription()
+
+    if (State == State_Setup or State == State_Done) then return end
+
+    -- If a card was moved out of the play area, move it back.
+    if (PlayedCards != nil) then
+        for i = 1, #PlayedCards do
+            if PlayedCards[i].Name == cardName then
+                local home = getObjectFromGUID(PlayAreaScriptingZone)
+                local homeBounds = home.getBounds()
+                local homePos = 
+                {
+                    homeBounds.center.x + math.random() * 30 - 15,
+                    homeBounds.center.y,
+                    homeBounds.center.z + math.random() * 20 - 12.5,
+                }
+            
+                broadcastToColor("Hey! Put that back!", player_color)
+                dropped_object.setPositionSmooth(homePos, false, false)
+                return
+            end
+        end
+    end
+
+    -- If the card wasn't dealt to the player move it off the 
+    -- board. 
+    if (DealtCards != nil) then
+        local found = false
+        for i = 1, #DealtCards do
+            if cardName == DealtCards[i].Name then
+                found = true
+            end
+        end
+
+        if not found then
+            broadcastToColor("Hey! That doesn't belong here!", player_color)
+            dropped_object.setPositionSmooth(BadPlayPosition, false, false)
+            return
+        end
+    end
+    
+    if (CardOverScriptingZone == nil) then 
+        dropped_object.deal(1, player_color)
+        return
+    end
+
+    CardOverScriptingZone = nil
+
+    local player = getPlayerNumberFromColor(player_color)
+
+    if (player == 0) then
+        print("Player is 0 -- that's bad.")
+        return
+    end
+
+    if (validateCard(cardName, player)) then
+        cardDesc = dropped_object.getDescription()
+        broadcastToAll(SeatMap[CurrentPlayerTurn].Name .. " played the " .. cardDesc)
+        csuit, crank = cardNameToSuitRank(cardName)
+
+        PlayedCards[#PlayedCards + 1] = 
+        {
+            Card = dropped_object,
+            Name = cardName,
+            Description = cardDesc,
+            Player = player,
+            Rank = crank,
+            Suit = csuit
+        }
+
+        checkHand()
+    else
+        dropped_object.deal(1, player_color)
+    end
+end
+
+--------------------------------------------
+--= Game Logic
+--------------------------------------------
 function beginNextRound()
     Round = Round + 1
    
@@ -340,7 +546,28 @@ function beginNextRound()
     end
 end
 
-function onBid()
+function onNextClicked()
+    if State == State_Setup then 
+        FirstDealerSeat = Dealer
+        Round = 0
+        Scores = { }
+        beginNextRound()
+        enableTurns()
+    elseif State == State_Bid then
+        onBidClicked()
+    elseif State == State_Play then
+        broadcastToAll("Please don't press this button again.")
+    elseif State == State_Done then
+        broadcastToAll("The game is over. Press reset to start over.")
+        disableTurns()
+    elseif State == State_PickSuit then
+        broadcastToAll(SeatMap[Dealer].Name .. ", please pick a suit from the menu at the top of the score card.")
+    end
+
+    updateAll()
+end
+
+function onBidClicked()
     local scoreRow = Scores[Round]
     local needToBid = { }
     for i = 1, #SeatMap do
@@ -409,8 +636,6 @@ function onReset(obj, player_clicker_color, alt_click)
     end
 
     resetGame()
-    refreshSeatMap()
-    updateAll()
 end
 
 function onPrevDealer()
@@ -481,16 +706,6 @@ function refreshSeatMap()
     end
 
     updateAll()
-end
-
-function onPlayerChangeColor(player_color)
-    refreshSeatMap()
-end
-function onPlayerConnect(player_id)
-    refreshSeatMap()
-end
-function onPlayerDisconnect(player_id)
-    refreshSeatMap()
 end
 
 function updateAll()
@@ -654,14 +869,6 @@ function ensureCorrectTurn(player_color_prev, player_color_next)
     end
 end
 
-function onPlayerTurnEnd(player_color_end, player_color_next)
-    ensureCorrectTurn(player_color_end, player_color_next)
-end
-
-function onPlayerTurnStart(player_color_start, player_color_previous)    
-    ensureCorrectTurn(player_color_previous, player_color_start)
-end
-
 function resetGame()
     disableTurns()
 
@@ -676,6 +883,8 @@ function resetGame()
     TrumpName = "?"
     PlayedCards = { }
     recallPack()
+    refreshSeatMap()
+    updateAll()
 end
 
 Timers = 0
@@ -694,21 +903,12 @@ function onSetInputExpired(params)
     self.editInput({index = params.index, value = params.text})
 end
 
-function onObjectDestroy(dying_object)
-    if (dyingObject == Deck) then Deck = nil end
-end
-
-function onObjectSearchStart(object, player_color)
-    local player = getPlayerNumberFromColor(player_color)
-    broadcastToAll(SeatMap[player].Name .. " is examining the draw pile! Cheater!", TABLE_text_color)
-end
-
 function dealCardsLater()
     startLuaCoroutine(self, "onDealCardsCoroutine")
 end
 
 function onDealCardsCoroutine(params)
-    for i = 1, 180 do
+    for i = 1, 120 do
         coroutine.yield(0)
     end
 
@@ -816,7 +1016,7 @@ function onDealCardsCoroutine(params)
         broadcastToAll("Turned a Wizard as trump!")
         broadcastToAll(SeatMap[Dealer].Name .. " please pick the trump suit from the top of the score sheet!")
         showSuitPicker()
-        onNext()
+        onNextClicked()
     end
 
     if (Trump != "W") then 
@@ -899,7 +1099,6 @@ function addToDeck(card)
 end
 
 function addToDiscardDeck(card)
-
     return pcall(function()
         card.setLock(false)
 
@@ -913,30 +1112,6 @@ function addToDiscardDeck(card)
         
         card.setPositionSmooth(DiscardDeckPosition, false, false)
     end)
-
-    --[[
-    Discarding = true
-    DontTouchList[#DontTouchList+1] = card
-    if not card.is_face_down then
-        card.flip()
-    end
-    card.drop()
-
-    if DiscardDeck != nil then
-        DiscardDeck.setLock(false)
-    end
-
-    if (DiscardDeck == nil) then
-        CaptureEnterContainer = true
-        DiscardDeck = card
-        DiscardDeck.setPositionSmooth(DiscardDeckPosition, false, false)
-    else
-        DiscardDeck.putObject(card)
-        DiscardDeck = CreatedDiscardDeck
-    end
-
-    DiscardDeck.setLock(true)
-    Discarding = false--]]
 end
 
 function clearFields()
@@ -1003,112 +1178,6 @@ function recallPack()
     Deck.setLock(true)
 end
 
--- Need to capture when a container gets created...
-function onObjectEnterContainer(container, enter_object)
-    if (Recalling) then
-        CreatedDeck = container
-        return
-    end
-    if (Discarding) then
-        CreatedDiscardDeck = container
-        return
-    end
-end
-
--- 
-
-CardOverScriptingZone = nil
-
-function onObjectEnterScriptingZone(zone, enter_object)
-    if (zone.getGUID() != ScriptingZone) then return end
-    if (enter_object.tag != 'Card') then return end
-    CardOverScriptingZone = enter_object
-end
-
-function onObjectLeaveScriptingZone(zone, leave_object)
-    if (zone.getGUID() != ScriptingZone) then return end
-    if (leave_object.tag != 'Card') then return end
-    CardOverScriptingZone = nil
-end
-
-function onObjectDrop(player_color, dropped_object)
-    cardName = dropped_object.getName()
-    cardDesc = dropped_object.getDescription()
-
-    if (State == State_Setup or State == State_Done) then return end
-
-    -- If a card was moved out of the play area, move it back.
-    if (PlayedCards != nil) then
-        for i = 1, #PlayedCards do
-            if PlayedCards[i].Name == cardName then
-                local home = getObjectFromGUID(ScriptingZone)
-                local homeBounds = home.getBounds()
-                local homePos = 
-                {
-                    homeBounds.center.x + math.random() * 30 - 15,
-                    homeBounds.center.y,
-                    homeBounds.center.z + math.random() * 20 - 12.5,
-                }
-            
-                broadcastToColor("Hey! Put that back!", player_color)
-                dropped_object.setPositionSmooth(homePos, false, false)
-                return
-            end
-        end
-    end
-
-    -- If the card wasn't dealt to the player move it off the 
-    -- board. 
-    if (DealtCards != nil) then
-        local found = false
-        for i = 1, #DealtCards do
-            if cardName == DealtCards[i].Name then
-                found = true
-            end
-        end
-
-        if not found then
-            broadcastToColor("Hey! That doesn't belong here!", player_color)
-            dropped_object.setPositionSmooth(BadPlayPosition, false, false)
-            return
-        end
-    end
-    
-    if (CardOverScriptingZone == nil) then 
-        dropped_object.deal(1, player_color)
-        return
-    end
-
-    CardOverScriptingZone = nil
-
-    local player = getPlayerNumberFromColor(player_color)
-
-    if (player == 0) then
-        print("Player is 0 -- that's bad.")
-        return
-    end
-
-    if (validateCard(cardName, player)) then
-        cardDesc = dropped_object.getDescription()
-        broadcastToAll(SeatMap[CurrentPlayerTurn].Name .. " played the " .. cardDesc)
-        csuit, crank = cardNameToSuitRank(cardName)
-
-        PlayedCards[#PlayedCards + 1] = 
-        {
-            Card = dropped_object,
-            Name = cardName,
-            Description = cardDesc,
-            Player = player,
-            Rank = crank,
-            Suit = csuit
-        }
-
-        checkHand()
-    else
-        dropped_object.deal(1, player_color)
-    end
-
-end
 
 function collectDiscards()
     -- pick up the cards on the mat
@@ -1143,7 +1212,9 @@ end
 Winner = {}
 
 function onFinishCheckHand()
-    -- Wait a bit
+    -- Wait a little bit before cleaning everything up. We should
+    -- replace this with a timer instead. Then we won't need the 
+    -- Winner global variable.
     for i = 0,60*5 do
         coroutine.yield(0)
 
@@ -1178,22 +1249,31 @@ end
 function checkHand()
     if (#PlayedCards == #SeatMap) then
         -- Round is over
-        -- Determine the winner
+
+        -- Determine the winner. Assume the first card is rock, and is currently
+        -- winning.
         Winner = PlayedCards[1]
         for i = 2, #PlayedCards do
+            -- If the current winner isn't a wizard, then something could
+            -- potentially trump it.
             if Winner.Suit != 'W' then
-                local checker = PlayedCards[i]
-                if checker.Suit == 'J' then
-                    -- It's not a winner for sure...
-                elseif checker.Suit == "W" then
-                    Winner = checker
+                local theCard = PlayedCards[i]
+                if theCard.Suit == 'J' then
+                    -- It's not a winner for sure.
+                elseif theCard.Suit == "W" then
+                    -- The wizard is the winner for sure
+                    Winner = theCard
                 else
-                    if checker.Suit == Winner.Suit then
-                        if checker.Rank > Winner.Rank then
-                            Winner = checker
+                    if theCard.Suit == Winner.Suit then
+                        -- If the cards are the same suit then a card of a higher
+                        -- rank becomes the winner.
+                        if theCard.Rank > Winner.Rank then
+                            Winner = theCard
                         end
-                    elseif checker.Suit == Trump then
-                        Winner = checker
+                    elseif theCard.Suit == Trump then
+                        -- If the cards aren't the same suit, then if the card is
+                        -- trump then it is the winner regardless of rank.
+                        Winner = theCard
                     end
                 end
             end    
@@ -1214,46 +1294,30 @@ function checkHand()
     end
 end
 
-function onObjectPickUp(player_color, picked_up_object)
-    if Discarding or Recalling then 
-        picked_up_object.drop()
-        broadcastToColor("Leave it!", player_color)
-    end
-
-    if DontTouchList == nil then return end
-    for i = 1, #DontTouchList do 
-        if picked_up_object == DontTouchList[i] then
-            picked_up_object.drop()
-            broadcastToColor("Leave it!", player_color)
-        end
-    end
-
-    local number = getPlayerNumberFromColor(player_color)
-    
-    for i = 1, #DealtCards do
-        if DealtCards[i].Owner != number and DealtCards[i].Card == picked_up_object then
-            picked_up_object.drop()
-            broadcastToColor("You can only play cards that were dealt to you!", player_color)
-        end
-    end
-end
-
 function validateCard(cardName, player)
+    -- Don't let the player play out of turn.
     if player != CurrentPlayerTurn then
         broadcastToAll("It's still " .. SeatMap[CurrentPlayerTurn].Name .. "'s turn!")
         return false
     end
 
+    -- Don't let the player play cards before the bidding has been completed
     if State != State_Play then
         broadcastToAll("Please bid first!")
         return false
     end
 
+    -- Assuming the player is allowed to play _ANY_ card should be fine...
+    -- Although maybe this should check to see if the card that they do
+    -- play actually came from their hand....
     if #PlayedCards == 0 then
-        -- Nobody played yet, so yea, it's probably okay
         return true
     end
 
+    -- Just a check to see if the player has already played a card. Since 
+    -- it's not possible to set the turn to nobody, we have to make sure
+    -- that the player can't just keep dropping cards or the script will
+    -- get broken.
     for i = 1, #PlayedCards do
         if (PlayedCards[i].Player == player) then
             broadcastToAll("Hold yer horses. You've already played!")
@@ -1261,24 +1325,15 @@ function validateCard(cardName, player)
         end
     end
 
-    -- Check if player has already played
-    --[[
-    for i,played in ipairs(PlayedCards) do
-        if played.player == player then
-            broadcastToAll("You already played!")
-            return false
-        end
-    end
-    ]]--
-
     suit, rank = cardNameToSuitRank(cardName)
 
-    -- Can always play a Wizard or Jester
+    -- The player can always play a Wizard or Jester no matter
+    -- what else is played.
     if (suit == 'W' or suit == 'J') then
         return true
     end
 
-    -- Determine the current suit
+    -- Determine the current suit for the hand.
     currentSuit = nil
     for i = 1, #PlayedCards do 
         if currentSuit == nil then
@@ -1292,8 +1347,9 @@ function validateCard(cardName, player)
         end               
     end
 
-    -- If a wizard is led, or was played after only jesters
-    -- then any card is valid
+    -- If a wizard is the current suit or the current suit
+    -- hasn't been determined yet (e.g. only Jesters have
+    -- been played) then any card is valid.
     if currentSuit == 'W' or currentSuit == nil then
         return true
     end
@@ -1303,7 +1359,9 @@ function validateCard(cardName, player)
         return true
     end
 
-    -- Determine what cards are in the player's hand
+    -- Otherwise the player is playing out of suit...
+
+    -- Determine what cards are in the player's hand.
     local handObjects = Player[SeatMap[player].Color].GetHandObjects(1)
     local hand = {}
     for i,o in ipairs(handObjects) do
@@ -1322,7 +1380,7 @@ function validateCard(cardName, player)
         end
     end
 
-    -- 
+    -- If they can't play in suit, then any card they have played is fine.
     return true
 end
 
@@ -1360,53 +1418,7 @@ function onPickSpades(obj, player_clicker_color, alt_click)
     onPickSuit("S", "Spades", player_clicker_color)
 end
 
--- Suit picker
-
-SuitPickerVisible = false
-SuitPickerFirstInputId = 0
-
-function showSuitPicker()
-    if (SuitPickerVisible) then return end
-    SuitPickerVisible = true
-
-    local buttons = self.getButtons()
-    SuitPickerFirstInputId = #buttons 
-
-    local inputsFirstX = -5.25
-    local inputsOffset = 3.685
-    local inputsWidth = 1800
-    local inputsHeight = 500
-
-    xpos = inputsFirstX
-    self.createButton({click_function="onPickHearts", function_owner = self, alignment=3, validation=2,
-    position = {xpos, zPos, -7.50}, width=inputsWidth, height=inputsHeight, font_size=350, label="Hearts" })
-    xpos = xpos + inputsOffset
-    
-    self.createButton({click_function="onPickClubs", function_owner = self, alignment=3, validation=2,
-    position = {xpos, zPos, -7.50}, width=inputsWidth, height=inputsHeight, font_size=350, label="Clubs" })
-    xpos = xpos + inputsOffset
-    
-    self.createButton({click_function="onPickDiamonds", function_owner = self, alignment=3, validation=2,
-    position = {xpos, zPos, -7.50}, width=inputsWidth, height=inputsHeight, font_size=350, label="Diamonds" })
-    xpos = xpos + inputsOffset
-    
-    self.createButton({click_function="onPickSpades", function_owner = self, alignment=3, validation=2,
-    position = {xpos, zPos, -7.50}, width=inputsWidth, height=inputsHeight, font_size=350, label="Spades" })
-
-end
-
-function hideSuitPicker()
-    if (not SuitPickerVisible) then return end
-
-    for i = 1, 4 do
-        self.removeButton(SuitPickerFirstInputId + i - 1)
-    end
-
-    SuitPickerVisible = false
-end
-
 -- Fuck this bullshit.
-
 function onBid1Changed(obj, player_clicker_color, input_value, selected)
     onBidChanged(1, player_clicker_color, input_value, selected)
 end
@@ -1445,7 +1457,13 @@ function onTricks6Changed(obj, player_clicker_color, input_value, selected)
     onTricksChanged(6, player_clicker_color, input_value, selected)
 end
 
--- Utility Functions
+--------------------------------------------
+--= Console Handlers
+--------------------------------------------
+
+--------------------------------------------
+--= Utility Functions
+--------------------------------------------
 function setTurnToCurrentPlayer()
     startLuaCoroutine(self, "setTurnToCurrentPlayerCoroutine")
 end
