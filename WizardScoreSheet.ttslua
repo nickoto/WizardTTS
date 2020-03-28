@@ -1,3 +1,13 @@
+-- Image file URLs
+
+-- Score sheet
+-- http://cloud-3.steamusercontent.com/ugc/1017191772739558362/E9510AC04902B77F58B7A650074CB017666D9432/
+
+-- Play Area
+--
+
+
+
 -- Cards must be named as follows, one pair for each of the cards in a wizard deck.
 -- As long as these cards are present the script should be able to figure out what
 -- to do.
@@ -32,9 +42,18 @@ SuitPickerVisible = false
 SuitPickerFirstInputId = 0
 
 RoundLabel = 0
-DealerLabel = 0
 StateLabel = 0
+
+DealerLabel = 0
+PlayerLabel = 0
+
+TrumpLabel = 0
+LeadLabel = 0
+
 NextButton = 0
+
+StartButton = 0
+BidButton = 0
 
 zPos = 0.6
 zPosHidden = -2
@@ -95,8 +114,8 @@ PlayedCards = { }
 -- An array of strings listing the suit that was played for each round
 Suits = { }
 
-Trump = "?"
-TrumpName = "?"
+Trump = ""
+TrumpName = ""
 ResetClickTime = 0
 ResetClickCount = 0
 
@@ -127,8 +146,8 @@ function createScoreBits(xpos, ypos)
         position={xpos + 1.20, zPos, ypos + 0.15}, width=0, height=0, font_size=170
     })
     self.createButton({
-        label="•", click_function="onNothing", function_owner=self,
-        position={xpos + 0.717, zPos, ypos + 0.008}, width=0, height=0, font_size=420
+        label="", click_function="onNothing", function_owner=self,
+        position={xpos + 0.717, zPos, ypos + 0.208}, width=0, height=0, font_size=420
     })
 end
 
@@ -154,6 +173,12 @@ function createUI()
     local inputsOffset = 2.265
     local inputsWidth = 1090
     local inputsHeight = 270
+
+    local statusLinesY = { 
+        scoreFirstY + 15 * scoreOffY + 0.1,
+        scoreFirstY + 16.5 * scoreOffY + 0.1,
+        scoreFirstY + 18 * scoreOffY + 0.1,
+     }
 
     -- Name header
     xpos = nameColumnsFirstX
@@ -204,26 +229,47 @@ function createUI()
         ButtonId = ButtonId + 1
     end
 
-    -- Round information
+    -- Information Status
     self.createButton({
-        label="20", click_function="onNothing", function_owner=self,
-        position={scoreFirstX, zPos, 6.27}, width=0, height=0, font_size=290
+        label="", click_function="onNothing", function_owner=self,
+        position={2.45, zPos, statusLinesY[1]}, width=0, height=0, font_size=290
     })
     RoundLabel = ButtonId
     ButtonId = ButtonId + 1
 
     self.createButton({
         label="", click_function="onNothing", function_owner=self,
-        position={scoreFirstX + 4.8, zPos, 6.27}, width=0, height=0, font_size=250
+        position={5.50, zPos, statusLinesY[1]}, width=0, height=0, font_size=270
+    })
+    StateLabel = ButtonId
+    ButtonId = ButtonId + 1
+
+    self.createButton({
+        label="", click_function="onNothing", function_owner=self,
+        position={2.45, zPos, statusLinesY[2]}, width=0, height=0, font_size=250
     })
     DealerLabel = ButtonId
     ButtonId = ButtonId + 1
 
     self.createButton({
-        label="Game Setup", click_function="onNothing", function_owner=self,
-        position={scoreFirstX + 10.3, zPos, 6.27}, width=0, height=0, font_size=270
+        label="", click_function="onNothing", function_owner=self,
+        position={ 6.15, zPos, statusLinesY[2]}, width=0, height=0, font_size=250
     })
-    StateLabel = ButtonId
+    PlayerLabel = ButtonId
+    ButtonId = ButtonId + 1
+
+    self.createButton({
+        label="", click_function="onNothing", function_owner=self,
+        position={2.45, zPos, statusLinesY[3]}, width=0, height=0, font_size=250
+    })
+    TrumpLabel = ButtonId
+    ButtonId = ButtonId + 1
+
+    self.createButton({
+        label="", click_function="onNothing", function_owner=self,
+        position={ 6.15, zPos, statusLinesY[3]}, width=0, height=0, font_size=200
+    })
+    LeadLabel = ButtonId
     ButtonId = ButtonId + 1
 
     -- Bids
@@ -231,7 +277,7 @@ function createUI()
     xpos = inputsFirstX
     for i = 1, 6 do
         self.createInput({input_function="onBid" .. i .. "Changed", function_owner = self, alignment=3, validation=2,
-                          position = {xpos, zPos, 6.98}, width=inputsWidth, height=inputsHeight, font_size=240, label="" })
+                          position = {xpos, zPos, 6.10}, width=inputsWidth, height=inputsHeight, font_size=240, label="" })
         xpos = xpos + inputsOffset
         BidInputs[i] = inputId
         inputId = inputId + 1
@@ -241,37 +287,23 @@ function createUI()
     xpos = inputsFirstX
     for i = 1, 6 do
         self.createButton({label="", click_function="onNothing", function_owner=self,
-                          position = {xpos, zPos, 7.62}, width=0, height=0, font_size=240 })
+                          position = {xpos, zPos, 6.79}, width=0, height=0, font_size=240 })
         xpos = xpos + inputsOffset
         TrickLabels[i] = ButtonId
         ButtonId = ButtonId + 1
     end
 
-    -- Action Buttons
-    self.createButton({
-        label="<", click_function="onPrevDealer", function_owner=self,
-        position={2.0, zPos, 3.7}, width=670, height=260, font_size=400,
-        tooltip="Change the dealer during setup"
-    })
-    ButtonId = ButtonId + 1
-
-    self.createButton({
-        label=">", click_function="onNextDealer", function_owner=self,
-        position={7.0, zPos, 3.7}, width=670, height=260, font_size=400,
-        tooltip="Change the dealer during setup"
-    })
-    ButtonId = ButtonId + 1
-    
+    -- Action Buttons   
     self.createButton({
         label="Next", click_function="onNextClicked", function_owner=self,
-        position={2.9, zPos, 5.2}, width=1770, height=560, font_size=400
+        position={-6.3, zPos, 7.8}, width=1770, height=450, font_size=400
     })
     NextButton = ButtonId
     ButtonId = ButtonId + 1
 
     self.createButton({
         label="Reset", click_function="onReset", function_owner=self,
-        position={6.5, zPos, 5.2}, width=1470, height=560, font_size=400,
+        position={6.5, zPos, 7.8}, width=1470, height=450, font_size=400,
         tooltip="Double click to reset."
     })
     ButtonId = ButtonId + 1
@@ -491,6 +523,7 @@ function onObjectDrop(player_color, dropped_object)
         }
 
         checkHand()
+        updateRound()
     else
         dropped_object.deal(1, player_color)
     end
@@ -531,8 +564,6 @@ function beginNextRound()
     State = State_Bid
     recallPack()
     dealCardsLater()
-    clearFields()
-    updateAll()
 
     -- Figure out who deals next
     Dealer = (((FirstDealerSeat - 1) + (Round - 1)) % (#SeatMap)) + 1
@@ -552,6 +583,9 @@ function beginNextRound()
             didBid = false,
         }
     end
+
+    clearFields()
+    updateAll()
 end
 
 function onNextClicked()
@@ -724,32 +758,62 @@ function updateAll()
     updatePlayers()
 end
 
+function getCurrentBidder()
+    local scoreRow = Scores[Round]
+    for i = 1, #SeatMap do
+        local pos = modValue(Dealer + i, #SeatMap)
+        if (not scoreRow[pos].didBid) then
+            return SeatMap[pos].Name
+        end
+    end
+    return ""
+end
+
 function updateRound()
+    local round = ""
+    local state = ""
+    local dealer = ""
+    local player = ""
+    local trump = ""
+    local lead = ""
+
     if State == State_Setup then        
-        self.editButton({index = RoundLabel, label = "-"})
-        self.editButton({index = DealerLabel, label = SeatMap[Dealer].Name})
-        self.editButton({index = StateLabel, label = "Game Setup"})
+        state = "Game Setup"
+        dealer = SeatMap[Dealer].Name
         self.editButton({index = NextButton, label = "Start", tooltip="Press this button to start the game."})
     elseif State == State_Done then
-        self.editButton({index = RoundLabel, label = "-"})
-        self.editButton({index = DealerLabel, label = "-"})
-        self.editButton({index = StateLabel, label = "Game Over"})
+        state = "Game Over"
         self.editButton({index = NextButton, label = "Press Reset", tooltip="Don't press here, press the reset button."})
     else
-        self.editButton({index = RoundLabel, label = Round})
-        self.editButton({index = DealerLabel, label = SeatMap[Dealer].Name})
+        round = Round
+        dealer = SeatMap[Dealer].Name
+        player = SeatMap[CurrentPlayerTurn].Name
+        trump = TrumpName
+
+        if PlayedCards and #PlayedCards != 0 then
+            lead = PlayedCards[1].Description
+        end
+
         if State == State_Bid then
-            self.editButton({index = StateLabel, label = "Enter Bids"})
+            state = "Bidding"
+            player = getCurrentBidder()
             self.editButton({index = NextButton, label = "Confirm", tooltip="Lock in everyone's bids."})
         elseif State == State_Play then
-            self.editButton({index = StateLabel, label = "Play the Hand"})
+            state = "Playing Hand"
             self.editButton({index = NextButton, label = "", tooltip="Please don't press this button right now."})
         elseif State == State_PickSuit then
-            self.editButton({index = StateLabel, label = SeatMap[Dealer].Name .. " Picking Suit"})
+            player = SeatMap[Dealer].Name
+            state = "Picking Suit"
             self.editButton({index = NextButton, label = "Pick Suit", tooltip="Click a button at the top of the score sheet to select the suit."})
         end
     end
 
+    self.editButton({index = RoundLabel, label = round})
+    self.editButton({index = StateLabel, label = state})
+    self.editButton({index = DealerLabel, label = dealer})
+    self.editButton({index = PlayerLabel, label = player})
+    self.editButton({index = TrumpLabel, label = trump})
+    self.editButton({index = LeadLabel, label = lead})
 end
 
 function updateScores()
@@ -887,8 +951,8 @@ function resetGame()
     Scores = { }
     SeatMap = { }
     Suits = { }
-    Trump = "?"
-    TrumpName = "?"
+    Trump = ""
+    TrumpName = ""
     PlayedCards = { }
     recallPack()
     refreshSeatMap()
@@ -1104,6 +1168,8 @@ function onBidChanged(index, player_clicker_color, input_value, selected)
     if not selected then
         setInputValueLater(BidInputs[index], bid)
     end
+
+    updateRound()
 end
 
 CreatedDeck = nil
@@ -1264,6 +1330,8 @@ function onFinishCheckHand()
         setTurnToCurrentPlayer()
     end
 
+    updateAll()
+
     return 1
 end
 
@@ -1406,6 +1474,10 @@ function validateCard(cardName, player)
 end
 
 function onPickSuit(suit, suitName, playerColor)
+    if (State != State_PickSuit) then
+        broadcastToAll("Sorry it's not time to pick a suit.")
+    end
+
     if (SeatMap[Dealer].Color != playerColor) then
         broadcastToColor("Sorry only " .. SeatMap[Dealer].Name .. ", the dealer, is allowed to pick the trump suit.", playerColor)
         return
@@ -1457,25 +1529,6 @@ function onBid5Changed(obj, player_clicker_color, input_value, selected)
 end
 function onBid6Changed(obj, player_clicker_color, input_value, selected)
     onBidChanged(6, player_clicker_color, input_value, selected)
-end
-
-function onTricks1Changed(obj, player_clicker_color, input_value, selected)
-    onTricksChanged(1, player_clicker_color, input_value, selected)
-end
-function onTricks2Changed(obj, player_clicker_color, input_value, selected)
-    onTricksChanged(2, player_clicker_color, input_value, selected)
-end
-function onTricks3Changed(obj, player_clicker_color, input_value, selected)
-    onTricksChanged(3, player_clicker_color, input_value, selected)
-end
-function onTricks4Changed(obj, player_clicker_color, input_value, selected)
-    onTricksChanged(4, player_clicker_color, input_value, selected)
-end
-function onTricks5Changed(obj, player_clicker_color, input_value, selected)
-    onTricksChanged(5, player_clicker_color, input_value, selected)
-end
-function onTricks6Changed(obj, player_clicker_color, input_value, selected)
-    onTricksChanged(6, player_clicker_color, input_value, selected)
 end
 
 --------------------------------------------
