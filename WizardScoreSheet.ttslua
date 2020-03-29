@@ -23,6 +23,7 @@ MaxRounds = { 20, 20, 20, 15, 12, 10 }
 DeckPosition = {x=34.26, y=1.09, z=0.0}
 DiscardDeckPosition = {x=34.26, y=1.09, z=12.0}
 BadPlayPosition = {x=34.26, y=1.09, z=-12.0}
+SeatOrder = {'Red', 'Green', 'Pink', 'Orange', 'Blue', 'White' }
 
 -- Game State "Machine"
 State_Setup = 0
@@ -114,6 +115,9 @@ PlayedCards = { }
 -- An array of strings listing the suit that was played for each round
 Suits = { }
 
+-- An array of nicknames
+NickNames = { }
+
 Trump = ""
 TrumpName = ""
 ResetClickTime = 0
@@ -147,7 +151,7 @@ function createScoreBits(xpos, ypos)
     })
     self.createButton({
         label="", click_function="onNothing", function_owner=self,
-        position={xpos + 0.717, zPos, ypos + 0.008}, width=0, height=0, font_size=420
+        position={xpos + 0.729, zPos, ypos + 0.01}, width=0, height=0, font_size=420
     })
 end
 
@@ -359,7 +363,7 @@ function onChat(message, player)
         return
     end
 
-    commandHandler(playerId, string.sub(message, 2))
+    commandHandler(player, string.sub(message, 2))
 end
 
 -- TODO: Implement onSave
@@ -718,15 +722,22 @@ function refreshSeatMap()
     local seated = getSeatedPlayers()
     local total = #seated
     if (total > 6) then total = 6 end
+    if (seated == nil) then SeatMap = { } return end
 
     if State == State_Setup then
         SeatMap = {}
-        for i = 1, #seated do
-            SeatMap[i] =  {
-                Color = seated[i],
-                Name = Player[seated[i]].steam_name,
-                Present = true
-            }
+        for c = 1, #SeatOrder do
+            for i = 1, #seated do
+                if seated[i] == SeatOrder[c] then
+                    local altName = NickNames[seated[i]]
+    
+                    SeatMap[#SeatMap+1] = {
+                        Color = seated[i],
+                        Name = altName or Player[seated[i]].steam_name,
+                        Present = true
+                    }
+                end
+            end
         end
 
         if (Dealer < 1 or Dealer > #seated) then
@@ -759,14 +770,37 @@ function updateAll()
 end
 
 function getCurrentBidder()
+    if (Round == 0) then return 0 end
+
     local scoreRow = Scores[Round]
     for i = 1, #SeatMap do
         local pos = modValue(Dealer + i, #SeatMap)
         if (not scoreRow[pos].didBid) then
-            return SeatMap[pos].Name
+            return pos
         end
     end
+
+    return 0
+end
+
+function getCurrentBidderName()
+    local pos = getCurrentBidder()
+    if pos != 0 then
+        return SeatMap[pos].Name
+    end
     return ""
+end
+
+function highlightCurrentBidder()
+    pos = getCurrentBidder()
+
+    for i = 1, 6 do
+        if pos == i then
+            self.editInput({index = BidInputs[i], color = {1,1,0.8,1}})
+        else
+            self.editInput({index = BidInputs[i], color = {1,1,1,1}})
+        end
+    end
 end
 
 function updateRound()
@@ -790,13 +824,28 @@ function updateRound()
         player = SeatMap[CurrentPlayerTurn].Name
         trump = TrumpName
 
-        if PlayedCards and #PlayedCards != 0 then
-            lead = PlayedCards[1].Description
+        -- Determins what the lead card field should show
+        -- If a Jester was played first, jester is the lead until
+        -- a new 'trump' is played. At which point we will show the new
+        -- leader plus (J).
+        if PlayedCards then
+            local temp = nil
+            for i = 1, #PlayedCards do
+                if temp == nil or temp == 'J' then
+                    if temp == "J" and PlayedCards[i].Suit != "J" then
+                        lead = PlayedCards[i].Description .. "(J)"
+                    else
+                        lead = PlayedCards[i].Description
+                    end
+
+                    temp = PlayedCards[i].Suit
+                end
+            end            
         end
 
         if State == State_Bid then
             state = "Bidding"
-            player = getCurrentBidder()
+            player = getCurrentBidderName()
             self.editButton({index = NextButton, label = "Confirm", tooltip="Lock in everyone's bids."})
         elseif State == State_Play then
             state = "Playing Hand"
@@ -814,6 +863,8 @@ function updateRound()
     self.editButton({index = PlayerLabel, label = player})
     self.editButton({index = TrumpLabel, label = trump})
     self.editButton({index = LeadLabel, label = lead})
+
+    highlightCurrentBidder()
 end
 
 function updateScores()
@@ -1042,9 +1093,10 @@ function onDealCardsCoroutine(params)
             local name = hands[i][r]
             local obj = findCard(name)
             local c = obj.Card
-            if card.InDeck != nil then 
+
+            if obj.InDeck != nil then 
                 -- Pull it out of the deck from wherever it is.
-                c = card.InDeck.takeObject({ guid = obj.Card.guid })
+                c = obj.InDeck.takeObject({ guid = obj.Card.guid })
             end
 
             -- Wait til the card is pulled, also makes for a more
@@ -1539,7 +1591,7 @@ end
 --------------------------------------------
 --= Console Handlers
 --------------------------------------------
-function commandHandler(playerColor, commandLine)
+function commandHandler(player, commandLine)
     local parts = split(commandLine, " ")
     local command = string.lower(parts[1])
     if (command == "help") then
@@ -1553,7 +1605,21 @@ function commandHandler(playerColor, commandLine)
     elseif (command == "start") then
         onCommandStart()
     elseif (command == "becomedealer") then
-        onCommandBecomeDealer(playerColor)
+        onCommandBecomeDealer(player.color)
+    elseif (command == "setdealer") then
+        if (#parts != 2) then
+            printToAll("becomedealer needs an argument")            
+        else
+            onCommandSetDealer(parts[2])
+        end
+    elseif (command == "randomdealer") then
+        onCommandRandomDealer()
+    elseif (command == "nick") then
+        if (#parts != 2) then
+            printToAll("nick needs an argument")            
+        else
+            onCommandSetNick(player.color, parts[2])
+        end
     else
         printToAll("Unknown command: '" .. command .. "'. Type !help for help.")
     end
@@ -1569,6 +1635,9 @@ function onCommandHelp()
     printToAll("Commands available before the game has started")
     printToAll("!start - Start the game if it hasn't been started")
     printToAll("!becomeDealer - Makes your player become the dealer")
+    printToAll("!setDealer [number] - Sets a specific player as dealer")
+    printToAll("!randomDealer - Random dealer")
+    printToAll("!nick [name] - Sets your display name ")
 end
 
 function onCommandReset(argument)
@@ -1601,6 +1670,40 @@ function onCommandBecomeDealer(playerColor)
     end
 
     updateAll()
+end
+
+function onCommandSetDealer(playerNumber)
+    if State != State_Setup then 
+        printToAll("Can't change the dealer after the game has started")
+    end
+
+    local num = tonumber(playerNumber)
+    if (num >= 1 and num <= #SeatMap) then
+        Dealer = num
+    else
+        printToAll("That player doesn't exist")
+    end
+
+    updateAll()
+end
+
+function onCommandRandomDealer()
+    if State != State_Setup then 
+        printToAll("Can't change the dealer after the game has started")
+    end
+
+    Dealer = math.random(#SeatMap)
+    print ("Dealer is " .. Dealer)
+    updateAll()
+end
+
+function onCommandSetNick(player, newName)
+    if State != State_Setup then 
+        printToAll("Can't change the nickname after the game has started")
+    end
+
+    NickNames[player] = newName
+    refreshSeatMap()
 end
 
 --------------------------------------------
