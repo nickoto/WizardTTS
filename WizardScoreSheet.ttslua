@@ -1,3 +1,5 @@
+-- Updates at https://github.com/nickoto/WizardTTS
+
 -- Image file URLs
 
 -- Score sheet
@@ -6,7 +8,10 @@
 -- Play Area
 --
 
-
+-- TODOS:
+-- Remove only cards that were 'played' and valid. Put every other card back in the players hand.
+-- Copy cards to cleanup into a different list. Then do the cleanup on that list.
+    
 
 -- Cards must be named as follows, one pair for each of the cards in a wizard deck.
 -- As long as these cards are present the script should be able to figure out what
@@ -750,9 +755,9 @@ function refreshSeatMap()
         end
         for i = 1, #seated do
             for j = 1, #SeatMap do
-                if SeatMap[i].Color == seated[i] then
-                    SeatMap[i].Present = true
-                    SeatMap[i].Name = Player[seated[i]].steam_name 
+                if SeatMap[j].Color == seated[i] then
+                    SeatMap[j].Present = true
+                    SeatMap[j].Name = Player[seated[i]].steam_name 
                 end
             end
         end
@@ -770,6 +775,7 @@ function updateAll()
 end
 
 function getCurrentBidder()
+    if (State == State_Done) then return 0 end
     if (Round == 0) then return 0 end
 
     local scoreRow = Scores[Round]
@@ -1161,9 +1167,9 @@ function onDealCardsCoroutine(params)
     if (Trump != "W") then 
         if (Trump == "J") then
             if (Round < MaxRounds[#SeatMap]) then
-                broadcastToAll("Final hand, no trump!")
-            else
                 broadcastToAll("No trump this hand!")
+            else
+                broadcastToAll("Final hand, no trump!")
             end
         else
             broadcastToAll(TrumpName .. " is trump for this hand.")
@@ -1322,10 +1328,10 @@ end
 
 function collectDiscards()
     -- pick up the cards on the mat
-    for i = 1, #PlayedCards do
+    for i = 1, #Discards do
         -- If the player is holding a card over a card that's being collected
         -- it can't be collected. And everything breaks.
-        local cardResult = findCard(PlayedCards[i].Name)
+        local cardResult = findCard(Discards[i].Name)
         local card = cardResult.Card
         if (cardResult.InDeck) then
             if not pcall(function()
@@ -1339,8 +1345,10 @@ function collectDiscards()
             end
         end
 
+        print("Discarding " .. Discards[i].Name)
+
         if not addToDiscardDeck(card) then
-            print("Can't clean up " .. PlayedCards[i].Name)
+            print("Can't clean up " .. Discards[i].Name)
             print("You might be able to finish the hand")
         end
     end
@@ -1351,6 +1359,7 @@ function finishCheckHandLater()
 end
 
 Winner = {}
+Discards = {}
 
 function onFinishCheckHand()
     -- Wait a little bit before cleaning everything up. We should
@@ -1378,7 +1387,7 @@ function onFinishCheckHand()
 
         collectDiscards()
 
-        PlayedCards = { }
+        Discards = { }
         Winner = { }
 
         setTurnToCurrentPlayer()
@@ -1433,6 +1442,8 @@ function checkHand()
 
         updateAll()
         finishCheckHandLater()
+        Discards = PlayedCards
+        PlayedCards = { }
     else
         -- Next player needs to play
         CurrentPlayerTurn = modValue(CurrentPlayerTurn + 1, #SeatMap)
@@ -1441,6 +1452,16 @@ function checkHand()
 end
 
 function validateCard(cardName, player)
+    if Winner == {} or Winner == nil then
+        broadcastToAll("Still cleaning up the last hand... hang on.")
+        return false
+    end
+
+    if #PlayedCards == #SeatMap then
+        broadcastToAll("Still cleaning up the last hand... hang on.")
+        return false
+    end
+
     -- Don't let the player play out of turn.
     if player != CurrentPlayerTurn then
         broadcastToAll("It's still " .. SeatMap[CurrentPlayerTurn].Name .. "'s turn!")
