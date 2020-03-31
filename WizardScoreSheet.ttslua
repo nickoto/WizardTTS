@@ -1741,6 +1741,39 @@ end
 --------------------------------------------
 --= Utility Functions
 --------------------------------------------
+
+-- This funciton will move a card just outside of the hand zone snapping area.
+-- It will still need to be moved elsewhere.
+function moveCardOutOfHand(card)
+    player = playerHoldingCard(card)
+    if (player == nil) then return end
+
+    handTransform = player.getHandTransform()
+
+    newPostion = { 0, 0, 0 }
+
+    newPosition = {
+        x = handTransform.position.x + (handTransform.scale.x + 5) * handTransform.forward.x,
+        y = handTransform.position.y + (handTransform.scale.y + 5) * handTransform.forward.y,
+        z = handTransform.position.z + (handTransform.scale.z + 5) * handTransform.forward.z,
+    }
+
+    card.setPosition(newPosition)
+end
+
+function playerHoldingCard(card)
+    colors = Player.getAvailableColors()
+    for c = 1, #colors do
+        player = Player[colors[c]]
+        handObjects = player.getHandObjects()
+        for i = 1, #handObjects do
+            if handObjects[i] == card then return player end
+        end
+    end
+
+    return nil
+end
+
 function split(str)
     local tbl = {}
     for i in string.gmatch(str, "%S+") do
