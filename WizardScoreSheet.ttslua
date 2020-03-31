@@ -1804,6 +1804,17 @@ function modValue(value, max)
     return ((value - 1) % max) + 1
 end
 
+-- After finding a card, if it is in a deck, take it out.
+function takeCard(name)
+    local card = findCard(name)
+
+    if (card.InDeck != nil) then
+        return card.InDeck.takeObject(card.Card)
+    else
+        return card.Card
+    end
+end
+
 function findCard(name)
     return findCardIn(name, getAllObjects(), nil)
 end
@@ -1815,6 +1826,7 @@ function findCardIn(name, souls, inDeck)
         local soulName = soul.getName and soul.getName() or soul.name or "No Name"
         if (soulTag == 'Card' or soulTag == "NoTag") then
             if soulName == name then 
+                if inDeck != nil and inDeck.tag != 'Deck' then inDeck = nil end
                 return {
                     Card = soul,
                     InDeck = inDeck
@@ -1823,10 +1835,7 @@ function findCardIn(name, souls, inDeck)
         elseif (soulTag == 'Deck' or soulTag == 'Scripting') then
             local itemInDeck = findCardIn(name, soul.getObjects(), soul)
             if (itemInDeck != nil and itemInDeck.Card != nil) then 
-                return {
-                    Card = itemInDeck.Card,
-                    InDeck = soulTag == 'Deck' and soul or nil
-                }
+                return itemInDeck
             end
         end
     end
@@ -1836,7 +1845,6 @@ function findCardIn(name, souls, inDeck)
         InDeck = nil
     }
 end
-
 
 function isObjectInHandZone(soul)
     for i, color in ipairs(Player.getAvailableColors()) do
