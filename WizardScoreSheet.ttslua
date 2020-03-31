@@ -1774,16 +1774,22 @@ function getPlayerNumberFromColor(player_color)
 end
 
 function cardNameToSuitRank(name)
+    if #name != 2 then return nil, nil end
+
     local rank = string.sub(name, 1, 1)
     local suit = string.sub(name, 2, 2)
 
-    nrank = -1
+    if (suit != "H" and suit != "C" and suit != "D" and suit != "S" and suit != "J" and suit != "W") then return nil, nil end
+
+    nrank = nil
     if rank == 'K' then nrank = 13
     elseif rank == 'Q' then nrank = 12
     elseif rank == 'J' then nrank = 11
     elseif rank == 'T' then nrank = 10
     elseif rank == 'A' then nrank = 14
     else nrank = tonumber(rank) end
+
+    if nrank == nil then return nil, nil end
 
     return suit, nrank
 end
