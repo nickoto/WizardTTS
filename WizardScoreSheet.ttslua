@@ -33,6 +33,7 @@
 -- If placing this object into a new board these are the GUIDs that the
 -- script requires.
 PlayAreaScriptingZone = '8fa5bc'
+ScriptingZoneBounds = { x1 = 0, x2 = 0, y1 = 0, y2 = 0, z1 = 0, z2 = 0 }
 
 -- Game constants
 MaxRounds = { 20, 20, 20, 15, 12, 10 }
@@ -385,6 +386,7 @@ end
 -- TODO: Implement onSave
 
 function onLoad(save_state)
+    setScriptingZoneBounds()
     createUI()
     resetGame()
     refreshSeatMap()
@@ -1738,6 +1740,116 @@ function onCommandSetNick(player, newName)
     refreshSeatMap()
 end
 
+--------------------------------------------
+--= Play Area Helpers
+--------------------------------------------
+function repositionCardsOnTable()
+    startLuaCoroutine(self, "repositionCardsOnTableCoroutine")
+end
+
+function repositionCardsOnTableCoroutine()
+    if RepositioningCards then return 1 end
+    
+    RepositioningCards = true
+
+    pcall(function() 
+        -- The space between cards spreads them evenly across the play area
+        -- if there are 6 players. If there are fewer, we still use the same
+        -- spacing because it looks nicer.
+        spaceSize = (ScriptingZoneBounds.x2 - ScriptingZoneBounds.x1) / 7
+
+        -- Number of cards that will need to be spread around.
+        cards = #SeatMap
+
+        for j = 1, #PlayedCards do
+            local card = findCard(PlayedCards[j].Name)
+            if (card.InDeck != nil) then
+                card = card.InDeck.takeObject(card.Card)
+            else
+                card = card.Card
+            end
+
+            offset = ((cards - 1) * spaceSize) / 2
+
+            if card.is_face_down then 
+                card.flip()
+            end
+
+            currentPosition = card.getPosition()
+            finalPosition = {
+                x = (ScriptingZoneBounds.x1 + ScriptingZoneBounds.x2) / 2 - offset + spaceSize * (j - 1),
+                y = (ScriptingZoneBounds.y1 + ScriptingZoneBounds.y2) / 2 + 1,
+                z = (ScriptingZoneBounds.z1 + ScriptingZoneBounds.z2) / 2
+            }
+
+            -- only do the following if the card has been moved away from where it is supposed to be.
+            if (math.abs(currentPosition.x - finalPosition.x) > 0.5 or
+                math.abs(currentPosition.z - finalPosition.z) > 0.5) then
+
+                -- moves the card out of hand if needed.
+                moveCardOutOfHand(card)
+
+                --card.setRotationSmooth({ x = 0, y = 180 + math.random() * 10 - 5, z = 0}, false, false)
+                card.setPositionSmooth(finalPosition, false, false)
+
+                for i = 0, 10 do
+                    coroutine.yield(0)
+                end
+            end
+        end
+    end)
+
+    RepositioningCards = false
+
+    return 1
+end
+
+function setScriptingZoneBounds()
+    -- Determine the bonunds of the scrippting zone
+    zone = getObjectFromGUID(PlayAreaScriptingZone)
+    scale = zone.getScale()
+    position = zone.getPosition()
+
+    ScriptingZoneBounds = { 
+        x1 = position.x - scale.x / 2,
+        x2 = position.x + scale.x / 2,
+        y1 = position.y - scale.y / 2,
+        y2 = position.y + scale.y / 2,
+        z1 = position.z - scale.z / 2,
+        z2 = position.z + scale.z / 2        
+    }
+end
+
+function removeObjectFromScriptingZone(object)
+    cardName = object.getName()
+    csuit, crank = cardNameToSuitRank(cardName)
+    objpos = object.getPosition()
+    isInZone = objpos.x >= ScriptingZoneBounds.x1 and objpos.x <= ScriptingZoneBounds.x2 and objpos.z >= ScriptingZoneBounds.z1 and objpos.z <= ScriptingZoneBounds.z2
+
+    -- For objects that aren't cards then then they shouldn't be in the play area.
+    -- We can move those out. Otherwise we can ignore the object completely.
+    if (csuit == nil or crank == nil) then
+        if isInZone then 
+            printToAll("That's not a card... And it doesn't belong in the play area...")
+
+            objpos.y = ScriptingZoneBounds.y2 + math.random() * 5
+            dx1 = ScriptingZoneBounds.x1 - objpos.x
+            dx2 = objpos.x - ScriptingZoneBounds.x2
+
+            if (dx1 > dx2) then
+                objpos.x = ScriptingZoneBounds.x1 - 30 - math.random() * 5
+            else
+                objpos.x = ScriptingZoneBounds.x2 + 25 + math.random() * 5
+            end
+
+            objpos.z = objpos.z + 5 - math.random() * 10
+
+            object.setPositionSmooth(objpos, false, false)
+        end
+        
+        return
+    end
+end
 --------------------------------------------
 --= Utility Functions
 --------------------------------------------
