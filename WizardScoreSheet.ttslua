@@ -35,6 +35,9 @@
 PlayAreaScriptingZone = '8fa5bc'
 ScriptingZoneBounds = { x1 = 0, x2 = 0, y1 = 0, y2 = 0, z1 = 0, z2 = 0 }
 
+-- Objects that only the script can touch
+LockDownObjects = {"04d143", "8fa5bc", "bd4c8c"}
+
 -- Game constants
 MaxRounds = { 20, 20, 20, 15, 12, 10 }
 DeckPosition = {x=34.26, y=1.09, z=0.0}
@@ -84,6 +87,19 @@ FirstDealerSeat = 0
 Round = 0
 Dealer = 1
 FirstPlayer = 0
+
+-- Locations a card can be in
+Location_PlayerMin = 1
+Location_PlayerMax = 6
+Location_Deck = 7
+Location_Discard = 8
+Location_Played = 9
+
+--[[ 
+    Name        - Name of the card being tracked.
+    Location    - The location we expect the card to be in.
+ --]]
+ CardTracking = { }
 
 --[[
     20x6 array
@@ -393,6 +409,7 @@ function onLoad(save_state)
     updateAll()
 end
 
+
 function onPlayerChangeColor(player_color)
     refreshSeatMap()
 end
@@ -418,6 +435,7 @@ function onObjectDestroy(dying_object)
 end
 
 function onObjectSearchStart(object, player_color)
+    if State == State_Done or State_Setup then return end
     local player = getPlayerNumberFromColor(player_color)
     broadcastToAll(SeatMap[player].Name .. " is examining the draw pile! Cheater!", TABLE_text_color)
 end
@@ -476,6 +494,19 @@ function onObjectDrop(player_color, dropped_object)
     cardName = dropped_object.getName()
     cardDesc = dropped_object.getDescription()
 
+    csuit, crank = cardNameToSuitRank(cardName)
+
+    -- For objects that aren't cards then then they shouldn't be in the play area.
+    -- We can move those out. Otherwise we can ignore the object completely.
+    if (csuit == nil or crank == nil) then
+        Wait.condition(
+            function() removeObjectFromScriptingZone(dropped_object) end,
+            function() return dropped_object.resting end,
+            2.0,
+            function() removeObjectFromScriptingZone(dropped_object) end)
+        return
+    end    
+
     if (State == State_Setup or State == State_Done) then return end
 
     -- If a card was moved out of the play area, move it back.
@@ -532,7 +563,6 @@ function onObjectDrop(player_color, dropped_object)
     if (validateCard(cardName, player)) then
         cardDesc = dropped_object.getDescription()
         broadcastToAll(SeatMap[CurrentPlayerTurn].Name .. " played the " .. cardDesc)
-        csuit, crank = cardNameToSuitRank(cardName)
 
         PlayedCards[#PlayedCards + 1] = 
         {
@@ -544,6 +574,7 @@ function onObjectDrop(player_color, dropped_object)
             Suit = csuit
         }
 
+        repositionCardsOnTable()
         checkHand()
         updateRound()
     else
@@ -1110,13 +1141,7 @@ function onDealCardsCoroutine(params)
         for i = 1, #SeatMap do
             -- Find the card we are going to be dealing out.
             local name = hands[i][r]
-            local obj = findCard(name)
-            local c = obj.Card
-
-            if obj.InDeck != nil then 
-                -- Pull it out of the deck from wherever it is.
-                c = obj.InDeck.takeObject({ guid = obj.Card.guid })
-            end
+            local card = takeCard(name)
 
             -- Wait til the card is pulled, also makes for a more
             -- satisfying animation.
@@ -1125,11 +1150,11 @@ function onDealCardsCoroutine(params)
             end
 
             -- Give the card to the player.
-            c.Deal(1, SeatMap[i].Color)
+            card.Deal(1, SeatMap[i].Color)
     
             -- Hang onto all of the information about the card that's been dealt out.
             DealtCards[#DealtCards+1] = {
-                Card = c,
+                Card = card,
                 Owner = i,
                 Color = SeatMap[i].Color,
                 Rank = string.sub(name, 1, 1),
@@ -1260,11 +1285,13 @@ end
 
 function addToDiscardDeck(card)
     return pcall(function()
-        card.setLock(false)
+        if (card.getLock()) then 
+            card.setLock(false) 
+        end
 
         DontTouchList[#DontTouchList+1] = card
         
-        if not card.is_face_down then
+        if not card.is_face_down then 
             card.flip()
         end
         
@@ -1344,20 +1371,11 @@ function collectDiscards()
     for i = 1, #Discards do
         -- If the player is holding a card over a card that's being collected
         -- it can't be collected. And everything breaks.
-        local cardResult = findCard(Discards[i].Name)
-        local card = cardResult.Card
-        if (cardResult.InDeck) then
-            if not pcall(function()
-                card = cardResult.InDeck.takeObject({ guid = card.Card.guid })
-            end) then
-                if not pcall(function()
-                    card = cardResult.InDeck.takeObject({ guid = card.Card.getGuid() })
-                end) then
-                    print("This is emabarassing...")
-                end
-            end
+        local card = nil
+        if not pcall(function() card = takeCard(Discards[i].Name) end) then
+            print("This is emabarassing...")
         end
-
+       
         print("Discarding " .. Discards[i].Name)
 
         if not addToDiscardDeck(card) then
@@ -1385,6 +1403,9 @@ function onFinishCheckHand()
         -- So this will prevent that hopefully.
         makePlayerDropCards()
     end
+
+    Discards = PlayedCards
+    PlayedCards = { }
 
     -- Cards left for the round?
     local scoreLine = Scores[Round]
@@ -1455,8 +1476,6 @@ function checkHand()
 
         updateAll()
         finishCheckHandLater()
-        Discards = PlayedCards
-        PlayedCards = { }
     else
         -- Next player needs to play
         CurrentPlayerTurn = modValue(CurrentPlayerTurn + 1, #SeatMap)
@@ -1850,6 +1869,17 @@ function removeObjectFromScriptingZone(object)
         return
     end
 end
+
+-- Is this expensive to do?
+UpdateCount = 0
+function onUpdate()
+    UpdateCount = UpdateCount + 1
+    if UpdateCount > 180 then 
+        UpdateCount = 0
+        repositionCardsOnTable()
+    end
+end
+
 --------------------------------------------
 --= Utility Functions
 --------------------------------------------
