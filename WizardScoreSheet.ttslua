@@ -1,12 +1,23 @@
 -- Updates at https://github.com/nickoto/WizardTTS
 
+-- Suggested Table
+-- The Kraken Table by Lily - This table has lots of space.
+-- https://steamcommunity.com/sharedfiles/filedetails/?id=1222553243&searchtext=
+
 -- Image file URLs
 
 -- Score sheet
 -- http://cloud-3.steamusercontent.com/ugc/1017191772739558362/E9510AC04902B77F58B7A650074CB017666D9432/
 
--- Play Area
---
+-- Card faces
+-- http://cloud-3.steamusercontent.com/ugc/1017191983753296471/DD08D6C50FC805E0089684B1046A13E9F56921CE/
+
+-- Card backs
+-- http://cloud-3.steamusercontent.com/ugc/1017191983753306789/0BBB4B7DA07DF35234DCB3E4E8E0CFB265FACC3C/
+
+-- Optional play area -- you only really need to set up a scripting area.
+-- http://cloud-3.steamusercontent.com/ugc/1017191983753364511/BD70A07CB819BC02D854183695DFACB1AED3DE27/
+
 
 -- TODOS:
 -- Remove only cards that were 'played' and valid. Put every other card back in the players hand.
@@ -1457,7 +1468,7 @@ function validateCard(cardName, player)
         return false
     end
 
-    if #PlayedCards == #SeatMap then
+    if #PlayedCards >= #SeatMap then
         broadcastToAll("Still cleaning up the last hand... hang on.")
         return false
     end
